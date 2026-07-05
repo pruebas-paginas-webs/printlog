@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#141619">
+  <meta name="description" content="PrintLog — uso compartido de la impresora 3D: cola, filamento, horas y gastos.">
+  <title>PrintLog</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='10' fill='%23e8823c'/%3E%3Ccircle cx='12' cy='12' r='3.4' fill='%23141619'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="app">
+
+  <header class="topbar">
+    <p class="marca">PRINTLOG<span class="marca-fase">F0</span></p>
+    <div class="topbar-der">
+      <span class="estado" id="estado-conexion" data-estado="pendiente">
+        <span class="estado-punto" aria-hidden="true"></span>
+        <span class="estado-texto" id="estado-texto">…</span>
+      </span>
+      <button class="chip-socio" id="chip-socio" hidden aria-label="Cambiar de socio" title="Cambiar de socio">
+        <span class="chip-color" id="chip-color" aria-hidden="true"></span>
+        <span class="chip-nombre" id="chip-nombre"></span>
+      </button>
+    </div>
+  </header>
+
+  <main>
+
+    <section class="vista" data-vista="inicio">
+      <h1 class="vista-titulo">Inicio</h1>
+
+      <article class="card">
+        <p class="card-etiqueta">; nodo de prueba → /prueba</p>
+
+        <div class="setup" id="prueba-setup" hidden>
+          <p class="setup-titulo">Firebase sin conectar</p>
+          <ol class="setup-pasos">
+            <li><b>Crear el proyecto</b> en console.firebase.google.com</li>
+            <li><b>Realtime Database</b> → crear + reglas <code>auth != null</code></li>
+            <li><b>Authentication</b> → habilitar acceso anónimo</li>
+            <li><b>Pegar la config web</b> en <code>app.js → firebaseConfig</code></li>
+          </ol>
+          <p class="gcode">; con eso, esta tarjeta se vuelve un contador en vivo</p>
+        </div>
+
+        <div class="prueba" id="prueba-contador" hidden>
+          <p class="prueba-num" id="prueba-num">0</p>
+          <p class="prueba-meta" id="prueba-meta">Nadie tocó todavía.</p>
+          <button class="boton boton-primario" id="btn-tocar">Sumar +1</button>
+          <p class="prueba-ayuda">Abrí la app en otro teléfono y mirá el número saltar solo.</p>
+        </div>
+      </article>
+
+      <p class="gcode">; impresión en curso, rollos y alertas — llegan en F1–F3</p>
+    </section>
+
+    <section class="vista" data-vista="cola" hidden>
+      <h1 class="vista-titulo">Cola</h1>
+      <p class="gcode">; cola de impresiones — llega en F1</p>
+    </section>
+
+    <section class="vista" data-vista="stock" hidden>
+      <h1 class="vista-titulo">Stock</h1>
+      <p class="gcode">; rollos y stock derivado — llega en F1–F2</p>
+    </section>
+
+    <section class="vista" data-vista="stats" hidden>
+      <h1 class="vista-titulo">Estadísticas</h1>
+      <p class="gcode">; horas, balance y tasa de éxito — llegan en F3</p>
+    </section>
+
+    <section class="vista" data-vista="wishlist" hidden>
+      <h1 class="vista-titulo">Wishlist</h1>
+      <p class="gcode">; ideas con votos — llega en F4</p>
+    </section>
+
+  </main>
+
+  <nav class="tabs" aria-label="Secciones">
+    <button class="tab" data-vista="inicio">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 11 8-7 8 7"/><path d="M6.5 9.5V20h11V9.5"/></svg>
+      <span>Inicio</span>
+    </button>
+    <button class="tab" data-vista="cola">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h13"/><path d="M4 12h16"/><path d="M4 18h10"/></svg>
+      <span>Cola</span>
+    </button>
+    <button class="tab" data-vista="stock">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.2"/><circle cx="12" cy="12" r="2.6"/></svg>
+      <span>Stock</span>
+    </button>
+    <button class="tab" data-vista="stats">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h16"/><path d="M7 20v-6"/><path d="M12 20V6"/><path d="M17 20v-9"/></svg>
+      <span>Stats</span>
+    </button>
+    <button class="tab" data-vista="wishlist">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 4.4 2.3 4.7 5.2.8-3.8 3.6.9 5.1-4.6-2.4-4.6 2.4.9-5.1L4.5 9.9l5.2-.8z"/></svg>
+      <span>Wishlist</span>
+    </button>
+  </nav>
+
+</div>
+
+<div class="selector" id="selector" role="dialog" aria-modal="true" aria-labelledby="selector-titulo" hidden>
+  <div class="selector-caja">
+    <p class="selector-kicker">; printlog · impresora compartida</p>
+    <h2 class="selector-titulo" id="selector-titulo">¿Quién sos?</h2>
+    <p class="selector-sub">Queda guardado en este teléfono. Lo cambiás cuando quieras tocando tu nombre, arriba a la derecha.</p>
+    <div class="selector-lista" id="selector-lista"></div>
+  </div>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
