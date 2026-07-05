@@ -28,13 +28,13 @@ import {
 // Es pública por diseño: la protección real son las reglas de RTDB (§2).
 // ---------------------------------------------------------------------
 const firebaseConfig = {
-  apiKey: "PEGAR_ACA",
-  authDomain: "PEGAR_ACA.firebaseapp.com",
-  databaseURL: "https://PEGAR_ACA-default-rtdb.firebaseio.com",
-  projectId: "PEGAR_ACA",
-  storageBucket: "PEGAR_ACA.firebasestorage.app",
-  messagingSenderId: "PEGAR_ACA",
-  appId: "PEGAR_ACA",
+  apiKey: "AIzaSyCUpXFLnHCa7GTotxkCr24IouTcI1kyZtg",
+  authDomain: "mengueche-print.firebaseapp.com",
+  databaseURL: "https://mengueche-print-default-rtdb.firebaseio.com",
+  projectId: "mengueche-print",
+  storageBucket: "mengueche-print.firebasestorage.app",
+  messagingSenderId: "813861146740",
+  appId: "1:813861146740:web:c800563597d40ebe7b4121",
 };
 
 const HAY_CONFIG = !firebaseConfig.apiKey.includes("PEGAR_ACA");
