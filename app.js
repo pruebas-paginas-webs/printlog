@@ -44,8 +44,8 @@ const HAY_CONFIG = !firebaseConfig.apiKey.includes("PEGAR_ACA");
 // ---------------------------------------------------------------------
 const SOCIOS_DEFAULT = {
   s1: { nombre: "Agustín", color: "#e07a3f" },
-  s2: { nombre: "Socio 2", color: "#4f8fe0" },
-  s3: { nombre: "Socio 3", color: "#5fb87a" },
+  s2: { nombre: "Matías", color: "#4f8fe0" },
+  s3: { nombre: "Joaquín", color: "#5fb87a" },
 };
 
 const estado = {
