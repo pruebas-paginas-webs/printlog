@@ -22,7 +22,7 @@ Tres amigos compraron una impresora 3D en conjunto y necesitan coordinar su uso:
 
 - **HTML + CSS + JS vanilla.** Sin frameworks, sin build step, sin bundler.
 - **Firebase Realtime Database** (plan Spark) vía CDN modular v10+ (`import` desde gstatic con `type="module"`).
-- **Deploy: GitHub Pages** desde la rama `main`.
+- **Deploy: Firebase Hosting** (`mengueche-print.web.app`) con `firebase deploy --only hosting` después de cada fase. El repo vive en GitHub (`pruebas-paginas-webs/printlog`); Pages queda activo como espejo de backup.
 - **Estructura: 3 archivos** → `index.html`, `styles.css`, `app.js`. Si `app.js` supera ~1500 líneas, se puede separar `calc.js` (métricas derivadas puras). Nada más.
 - **Identidad:** selector "¿Quién sos?" al abrir la app por primera vez, persistido en `localStorage`. No hay login con contraseña entre socios.
 - **Seguridad:** Firebase Anonymous Auth habilitado + reglas de RTDB:
