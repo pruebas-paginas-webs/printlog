@@ -217,6 +217,9 @@ overlay.addEventListener("click", (e) => { if (e.target === overlay && overlayCe
 // Modal con formulario
 function abrirHoja({ titulo, cuerpoEl, guardar, textoGuardar = "Guardar" }) {
   const hoja = el("div", "hoja");
+  hoja.setAttribute("role", "dialog");
+  hoja.setAttribute("aria-modal", "true");
+  hoja.setAttribute("aria-label", titulo);
   const cab = el("div", "hoja-cab", `<span class="agarre"></span><span class="hoja-tit">${esc(titulo)}</span>`);
   const cerrar = el("button", "hoja-cerrar", svgIco("x"));
   cerrar.setAttribute("aria-label", "Cerrar");
@@ -230,11 +233,18 @@ function abrirHoja({ titulo, cuerpoEl, guardar, textoGuardar = "Guardar" }) {
   const bCancel = boton("Cancelar", "boton-sec");
   bCancel.onclick = overlayHide;
   const bGuardar = boton(textoGuardar, "boton-primario");
-  bGuardar.onclick = guardar;
+  // guard anti doble-submit: dos taps rápidos no deben crear duplicados
+  bGuardar.onclick = async () => {
+    if (bGuardar.disabled) return;
+    bGuardar.disabled = true;
+    try { await guardar(); } finally { bGuardar.disabled = false; }
+  };
   pie.append(bCancel, bGuardar);
 
   hoja.append(cab, cuerpo, pie);
   overlayAbrir(hoja, { cerrable: true });
+  // foco al primer campo (o al cerrar) para teclado y lectores
+  (cuerpo.querySelector("input:not([hidden]), select, textarea") || cerrar).focus();
 }
 
 // Action sheet: [{label, icon, danger, onClick} | "sep"]
@@ -270,7 +280,7 @@ function confirmar({ titulo, mensaje, ok = "Confirmar", cancelar = "Cancelar", p
 function toast(msg, error = false) {
   const t = el("div", "toast" + (error ? " err" : ""), `<span class="pip"></span><span>${esc(msg)}</span>`);
   $("#toasts").append(t);
-  setTimeout(() => { t.classList.add("saliendo"); setTimeout(() => t.remove(), 220); }, 2400);
+  setTimeout(() => { t.classList.add("saliendo"); setTimeout(() => t.remove(), 220); }, 3200);
 }
 
 document.addEventListener("keydown", (e) => {
@@ -303,10 +313,18 @@ function renderVistaActual() {
   else if (estado.vista === "wishlist") renderWishlist();
 }
 
+// Coalescing: varios onValue seguidos (p. ej. al conectar llegan 6 nodos)
+// producen UN solo render en el próximo frame, no uno por listener.
+let renderPendiente = false;
 function renderTodo() {
-  aplicarAcento();
-  renderChip();
-  renderVistaActual();
+  if (renderPendiente) return;
+  renderPendiente = true;
+  requestAnimationFrame(() => {
+    renderPendiente = false;
+    aplicarAcento();
+    renderChip();
+    renderVistaActual();
+  });
 }
 
 function renderFab(nombre) {
@@ -873,7 +891,15 @@ function verFoto(id) {
 // =====================================================================
 function marcarError(input, msg) {
   toast(msg, true);
-  input?.focus();
+  if (input) {
+    input.classList.add("campo-invalido");
+    input.setAttribute("aria-invalid", "true");
+    input.addEventListener("input", () => {
+      input.classList.remove("campo-invalido");
+      input.removeAttribute("aria-invalid");
+    }, { once: true });
+    input.focus();
+  }
   return null;
 }
 const sociosOptions = (sel) =>
