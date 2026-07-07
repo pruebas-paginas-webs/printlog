@@ -1,2 +1,5 @@
 # tooling local de Claude Code
 .claude/
+
+# cache del CLI de Firebase
+.firebase/

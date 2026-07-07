@@ -307,6 +307,18 @@ Wishlist con votos y "mandar a cola", mantenimiento con alerta por horas, fotos 
 - Sin dependencias externas salvo el SDK de Firebase por CDN y las dos Google Fonts.
 - Commits atómicos por feature, mensaje en español, prefijo de fase: `F2: ajuste manual de stock con flujo de pesada`.
 
+### 8.1 Decisiones de implementación ya tomadas (no cambiar sin motivo)
+
+Fijadas en F0/F1 para mantener coherencia entre sesiones y modelos:
+
+- **Tipografía real:** IBM Plex Mono + IBM Plex Sans (no JetBrains Mono/Inter). Cargadas de Google Fonts. Variables CSS `--mono` y `--sans`.
+- **Paleta base en `:root`:** `--fondo #141619`, `--superficie #1c1f23`, `--superficie-2 #23272c`, `--borde #2d3238`, `--texto #e9e7e2`, `--texto-suave #9ba1a8`, `--acento #e8823c` (fallback PLA), `--exito #5fb87a`, `--alerta #e0b34f`, `--peligro #d96b5b`. El acento lo pisa por JS el `colorHex` del rollo cargado (§6).
+- **`localStorage`:** una sola clave, `printlog_socio`, guarda el `socioId` (`s1`/`s2`/`s3`).
+- **Seed idempotente:** si `/socios` no existe al conectar, se escribe `SOCIOS_DEFAULT` desde el cliente. Socios fijos: s1 Agustín `#e07a3f`, s2 Matías `#4f8fe0`, s3 Joaquín `#5fb87a`.
+- **Módulos ES:** `app.js` y `calc.js` con `type="module"`. Firebase por CDN gstatic v10.12.2. `$`/`$$` como atajos de `querySelector`.
+- **UI construida en JS:** las vistas Inicio/Cola/Stock se renderizan desde `app.js` dentro de contenedores vacíos; overlay único reutilizado para modales, action sheets, confirmaciones y toasts.
+- **Fechas/plata:** epoch ms; formato con `Intl` es-AR, moneda ARS.
+
 ---
 
 ## 9. Edge cases ya decididos

@@ -17,7 +17,7 @@
 <div class="app">
 
   <header class="topbar">
-    <p class="marca">PRINTLOG<span class="marca-fase">F0</span></p>
+    <p class="marca">PRINTLOG<span class="marca-fase">F1</span></p>
     <div class="topbar-der">
       <span class="estado" id="estado-conexion" data-estado="pendiente">
         <span class="estado-punto" aria-hidden="true"></span>
@@ -31,44 +31,9 @@
   </header>
 
   <main>
-
-    <section class="vista" data-vista="inicio">
-      <h1 class="vista-titulo">Inicio</h1>
-
-      <article class="card">
-        <p class="card-etiqueta">; nodo de prueba → /prueba</p>
-
-        <div class="setup" id="prueba-setup" hidden>
-          <p class="setup-titulo">Firebase sin conectar</p>
-          <ol class="setup-pasos">
-            <li><b>Crear el proyecto</b> en console.firebase.google.com</li>
-            <li><b>Realtime Database</b> → crear + reglas <code>auth != null</code></li>
-            <li><b>Authentication</b> → habilitar acceso anónimo</li>
-            <li><b>Pegar la config web</b> en <code>app.js → firebaseConfig</code></li>
-          </ol>
-          <p class="gcode">; con eso, esta tarjeta se vuelve un contador en vivo</p>
-        </div>
-
-        <div class="prueba" id="prueba-contador" hidden>
-          <p class="prueba-num" id="prueba-num">0</p>
-          <p class="prueba-meta" id="prueba-meta">Nadie tocó todavía.</p>
-          <button class="boton boton-primario" id="btn-tocar">Sumar +1</button>
-          <p class="prueba-ayuda">Abrí la app en otro teléfono y mirá el número saltar solo.</p>
-        </div>
-      </article>
-
-      <p class="gcode">; impresión en curso, rollos y alertas — llegan en F1–F3</p>
-    </section>
-
-    <section class="vista" data-vista="cola" hidden>
-      <h1 class="vista-titulo">Cola</h1>
-      <p class="gcode">; cola de impresiones — llega en F1</p>
-    </section>
-
-    <section class="vista" data-vista="stock" hidden>
-      <h1 class="vista-titulo">Stock</h1>
-      <p class="gcode">; rollos y stock derivado — llega en F1–F2</p>
-    </section>
+    <section class="vista" data-vista="inicio"><div id="cont-inicio"></div></section>
+    <section class="vista" data-vista="cola" hidden><div id="cont-cola"></div></section>
+    <section class="vista" data-vista="stock" hidden><div id="cont-stock"></div></section>
 
     <section class="vista" data-vista="stats" hidden>
       <h1 class="vista-titulo">Estadísticas</h1>
@@ -79,8 +44,12 @@
       <h1 class="vista-titulo">Wishlist</h1>
       <p class="gcode">; ideas con votos — llega en F4</p>
     </section>
-
   </main>
+
+  <button class="fab" id="fab" hidden>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+    <span id="fab-texto">Nueva</span>
+  </button>
 
   <nav class="tabs" aria-label="Secciones">
     <button class="tab" data-vista="inicio">
@@ -107,6 +76,7 @@
 
 </div>
 
+<!-- Selector de socio (primera vez / cambio) -->
 <div class="selector" id="selector" role="dialog" aria-modal="true" aria-labelledby="selector-titulo" hidden>
   <div class="selector-caja">
     <p class="selector-kicker">; printlog · impresora compartida</p>
@@ -115,6 +85,12 @@
     <div class="selector-lista" id="selector-lista"></div>
   </div>
 </div>
+
+<!-- Overlay reutilizable: modales, action sheets y confirmaciones se inyectan acá -->
+<div class="overlay" id="overlay" hidden></div>
+
+<!-- Toasts -->
+<div class="toasts" id="toasts" aria-live="polite"></div>
 
 <script type="module" src="app.js"></script>
 </body>
