@@ -21,6 +21,8 @@
   --sans: "IBM Plex Sans", system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, monospace;
   --sombra: 0 8px 30px rgba(0, 0, 0, 0.45);
+  /* brillo sutil en el borde superior: lee como panel de máquina, sin sombra */
+  --sheen: inset 0 1px 0 rgba(255, 255, 255, 0.035);
 }
 
 /* ---- base ------------------------------------------------------ */
@@ -91,6 +93,7 @@ code {
   border: 1px solid color-mix(in srgb, var(--acento) 45%, transparent);
   padding: 3px 6px;
   border-radius: 5px;
+  transition: color 0.4s ease, border-color 0.4s ease;
 }
 
 .topbar-der { display: flex; align-items: center; gap: 10px; }
@@ -125,15 +128,24 @@ main {
   padding: 20px 16px calc(96px + env(safe-area-inset-bottom));
 }
 
-.vista { display: flex; flex-direction: column; gap: 14px; }
+/* ritmo en tiers: 20px separa SECCIONES, 10px agrupa ITEMS dentro */
+.vista { display: flex; flex-direction: column; gap: 20px; }
 
-.vista-titulo { font: 600 21px/1.2 var(--sans); letter-spacing: -0.01em; }
+.vista-titulo {
+  position: relative;
+  font: 600 22px/1.2 var(--sans); letter-spacing: -0.015em;
+}
+/* firma: tick de acento bajo el título — sigue el color del filamento */
+.vista-titulo::after {
+  content: ""; position: absolute; left: 0; bottom: -9px;
+  width: 30px; height: 3px; border-radius: 2px;
+  background: var(--acento); transition: background 0.4s ease;
+}
 
 .seccion { display: flex; flex-direction: column; gap: 10px; }
 
 .seccion-cab {
   display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
-  margin-top: 4px;
 }
 .seccion-tit {
   font: 600 12px/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase;
@@ -150,6 +162,7 @@ main {
   border: 1px solid var(--borde);
   border-radius: var(--radio);
   padding: 14px;
+  box-shadow: var(--sheen);
 }
 
 .card-cab { display: flex; align-items: flex-start; gap: 10px; }
@@ -270,10 +283,11 @@ details.hist[open] .hist-sum .chev { transform: rotate(180deg); }
   display: flex; flex-direction: column; gap: 3px;
   padding: 14px; text-align: left;
   background: var(--superficie); border: 1px solid var(--borde); border-radius: var(--radio);
+  box-shadow: var(--sheen);
   transition: border-color 0.15s;
 }
 .mini-stat:hover { border-color: var(--texto-suave); }
-.mini-stat-num { font: 700 26px/1 var(--mono); font-variant-numeric: tabular-nums; }
+.mini-stat-num { font: 700 30px/1 var(--mono); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .mini-stat-lbl { font: 500 12px var(--sans); color: var(--texto-suave); }
 
 /* ---- rollo card (stock) ----------------------------------------- */
@@ -294,7 +308,7 @@ details.hist[open] .hist-sum .chev { transform: rotate(180deg); }
   height: 9px; border-radius: 999px; overflow: hidden;
   background: var(--superficie-2); border: 1px solid var(--borde);
 }
-.rollo-barra-fill { display: block; height: 100%; border-radius: 999px; transition: width 0.35s ease; }
+.rollo-barra-fill { display: block; height: 100%; border-radius: 999px; transition: width 0.35s ease, background 0.4s ease; }
 .rollo-barra-fill.neg { background: var(--peligro); }
 .rollo-barra-meta {
   display: flex; align-items: baseline; justify-content: space-between;
@@ -368,7 +382,7 @@ details.expand[open] > summary .chev { transform: rotate(180deg); }
   background: var(--acento); color: var(--acento-tinta);
   font: 600 15px var(--sans);
   box-shadow: 0 6px 20px color-mix(in srgb, var(--acento) 40%, transparent), var(--sombra);
-  transition: filter 0.15s, transform 0.05s;
+  transition: filter 0.15s, transform 0.05s, background 0.4s ease, box-shadow 0.4s ease;
 }
 .fab:hover { filter: brightness(1.08); }
 .fab:active { transform: translateY(1px); }
@@ -667,6 +681,7 @@ details.expand[open] > summary .chev { transform: rotate(180deg); }
   display: flex; align-items: center; gap: 12px;
   width: 100%; min-height: 54px; padding: 8px 14px; text-align: left;
   background: var(--superficie); border: 1px solid var(--borde); border-radius: 10px;
+  box-shadow: var(--sheen);
   transition: border-color 0.15s;
 }
 .prox:hover { border-color: var(--texto-suave); }
@@ -685,6 +700,7 @@ details.expand[open] > summary .chev { transform: rotate(180deg); }
   display: flex; align-items: center; gap: 12px;
   width: 100%; min-height: 54px; padding: 8px 14px; text-align: left;
   background: var(--superficie); border: 1px solid var(--borde); border-radius: 10px;
+  box-shadow: var(--sheen);
   transition: border-color 0.15s;
 }
 .rollo-mini:hover { border-color: var(--texto-suave); }

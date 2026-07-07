@@ -3,3 +3,6 @@
 
 # cache del CLI de Firebase
 .firebase/
+
+# progreso de trabajo local (design-director, etc.)
+.agents/

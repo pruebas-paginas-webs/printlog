@@ -314,12 +314,13 @@ function renderVistaActual() {
 }
 
 // Coalescing: varios onValue seguidos (p. ej. al conectar llegan 6 nodos)
-// producen UN solo render en el próximo frame, no uno por listener.
+// producen UN solo render, no uno por listener. Microtask (no rAF): se
+// ejecuta siempre, incluso con la pestaña en segundo plano.
 let renderPendiente = false;
 function renderTodo() {
   if (renderPendiente) return;
   renderPendiente = true;
-  requestAnimationFrame(() => {
+  queueMicrotask(() => {
     renderPendiente = false;
     aplicarAcento();
     renderChip();
