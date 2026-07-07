@@ -604,6 +604,135 @@ details.expand[open] > summary .chev { transform: rotate(180deg); }
 .switch input:checked + .via { background: var(--peligro); }
 .switch input:checked + .via::before { transform: translateX(18px); background: #fff; }
 
+/* ---- F3: equidad, espera, dashboard, estadísticas ----------------- */
+
+/* strip de equidad arriba de la Cola (§4.7) */
+.equidad {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+  padding: 11px 14px;
+  background: var(--superficie); border: 1px solid var(--borde);
+  border-radius: 10px;
+}
+.equidad-lbl {
+  font: 600 10.5px/1 var(--mono); letter-spacing: 0.07em; text-transform: uppercase;
+  color: var(--texto-suave); margin-right: 2px;
+}
+.equidad-socio {
+  display: inline-flex; align-items: center; gap: 6px;
+  font: 400 12.5px var(--sans); color: var(--texto-suave);
+}
+.equidad-socio b { color: var(--texto); font-weight: 600; font-size: 13px; }
+.equidad-socio .punto { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.equidad-socio.turno { color: var(--texto); }
+.equidad-socio.turno::after {
+  content: "prioridad";
+  font: 600 9px/1 var(--mono); letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--acento); border: 1px solid color-mix(in srgb, var(--acento) 40%, transparent);
+  padding: 3px 5px; border-radius: 4px;
+}
+
+/* chip de espera acumulada en cada card de la cola (§4.7) */
+.espera {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin-top: 10px;
+  font: 500 12.5px var(--mono); color: var(--texto-suave);
+}
+.espera svg { width: 15px; height: 15px; }
+.espera.ya { color: var(--acento); }
+
+/* alerta de mantenimiento (dashboard) */
+.alerta-mant {
+  display: flex; align-items: center; gap: 13px;
+  padding: 13px 15px; border-radius: var(--radio);
+  background: color-mix(in srgb, var(--alerta) 10%, var(--superficie));
+  border: 1px solid color-mix(in srgb, var(--alerta) 45%, var(--borde));
+}
+.alerta-mant svg { width: 22px; height: 22px; color: var(--alerta); flex: none; }
+.alerta-mant div { display: flex; flex-direction: column; gap: 2px; }
+.alerta-mant b { font: 600 14.5px var(--sans); color: var(--alerta); }
+.alerta-mant span { font-size: 12.5px; color: var(--texto-suave); }
+
+/* próximos en cola (dashboard) */
+.prox {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; min-height: 54px; padding: 8px 14px; text-align: left;
+  background: var(--superficie); border: 1px solid var(--borde); border-radius: 10px;
+  transition: border-color 0.15s;
+}
+.prox:hover { border-color: var(--texto-suave); }
+.prox-n {
+  width: 24px; height: 24px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  font: 600 12px var(--mono); color: var(--acento);
+  border: 1px solid color-mix(in srgb, var(--acento) 40%, transparent); border-radius: 7px;
+}
+.prox-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.prox-nombre { font: 600 14px var(--sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prox-espera { font: 500 11.5px var(--mono); color: var(--texto-suave); }
+
+/* rollos compactos (dashboard) */
+.rollo-mini {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; min-height: 54px; padding: 8px 14px; text-align: left;
+  background: var(--superficie); border: 1px solid var(--borde); border-radius: 10px;
+  transition: border-color 0.15s;
+}
+.rollo-mini:hover { border-color: var(--texto-suave); }
+.rollo-mini-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.rollo-mini-nombre { font: 600 13.5px var(--sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rollo-mini-nombre i { font: 500 11px var(--mono); color: var(--texto-suave); font-style: normal; margin-left: 4px; }
+.rollo-mini-via { display: block; height: 5px; border-radius: 999px; overflow: hidden; background: var(--superficie-2); border: 1px solid var(--borde-suave); }
+.rollo-mini-fill { display: block; height: 100%; border-radius: 999px; }
+.rollo-mini-fill.neg { background: var(--peligro); }
+.rollo-mini-g { font: 600 13px var(--mono); flex: none; }
+.rollo-mini-g.txt-neg { color: var(--peligro); }
+.rollo-mini-g.txt-bajo { color: var(--alerta); }
+.mini-alerta {
+  font: 600 9px/1 var(--mono); letter-spacing: 0.05em; text-transform: uppercase; font-style: normal;
+  color: var(--alerta); border: 1px solid color-mix(in srgb, var(--alerta) 45%, transparent);
+  padding: 2px 5px; border-radius: 4px; margin-left: 7px; vertical-align: 1px; white-space: nowrap;
+}
+.mini-alerta.neg { color: #fff; background: color-mix(in srgb, var(--peligro) 88%, black); border-color: transparent; }
+
+/* estadísticas: cards por socio */
+.socio-cab { display: flex; align-items: center; gap: 10px; }
+.socio-cab .punto { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+.socio-nombre { font: 600 16px var(--sans); flex: 1; }
+.socio-imps { font: 500 11.5px var(--mono); color: var(--texto-suave); }
+.socio-cifras { display: flex; gap: 18px; margin-top: 12px; }
+.socio-balance {
+  margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--borde-suave);
+  display: flex; flex-direction: column; gap: 7px;
+}
+.socio-balance .linea { display: flex; align-items: baseline; justify-content: space-between; font-size: 14px; }
+.socio-balance .k { color: var(--texto-suave); font-size: 13px; }
+.socio-balance .mono { font-weight: 600; font-size: 14px; }
+.socio-balance .neto { padding-top: 7px; border-top: 1px dashed var(--borde-suave); }
+.socio-balance .neto.pos .mono { color: var(--exito); }
+.socio-balance .neto.neg .mono { color: var(--peligro); }
+
+.nota-balance .linea-stock {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  font-size: 14px; margin-bottom: 10px;
+}
+.nota-balance .linea-stock b { font-size: 15px; }
+.nota { font-size: 12px; line-height: 1.55; color: var(--texto-suave); }
+
+/* motivos de fallo: barras horizontales */
+.motivo { display: flex; align-items: center; gap: 10px; padding: 5px 0; }
+.motivo-lbl { flex: 0 0 42%; font-size: 13px; color: var(--texto-suave); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.motivo-via { flex: 1; height: 8px; border-radius: 999px; background: var(--superficie-2); overflow: hidden; }
+.motivo-fill { display: block; height: 100%; border-radius: 999px; background: var(--peligro); opacity: 0.8; }
+.motivo-n { font: 600 13px var(--mono); width: 20px; text-align: right; }
+
+/* gramos por mes: barras CSS verticales (§5.4) */
+.meses { display: flex; align-items: flex-end; gap: 8px; height: 130px; padding-top: 18px; }
+.mes { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 5px; height: 100%; }
+.mes-g { font-size: 10px; color: var(--texto-suave); height: 13px; }
+.mes-via { flex: 1; width: 100%; max-width: 44px; display: flex; align-items: flex-end; background: var(--superficie-2); border-radius: 6px; overflow: hidden; }
+.mes-fill { display: block; width: 100%; background: var(--acento); border-radius: 6px 6px 0 0; transition: height 0.35s ease; min-height: 0; }
+.mes-lbl { font: 500 10.5px var(--mono); color: var(--texto-suave); text-transform: lowercase; }
+
 /* ---- toasts ------------------------------------------------------ */
 
 .toasts {

@@ -14,7 +14,12 @@ import {
   getDatabase, ref, onValue, set, push, update, remove,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
-import { costoPorGramo, ordenarColaProvisoria, pesoRestante } from "./calc.js";
+import {
+  costoPorGramo, pesoRestante,
+  balancePorSocio, stockValorizado, gastoDelMes,
+  horasMaquina, statsPorSocio, estadisticasGlobales, gramosPorMes, horasDesdeUltimoMant,
+  tiempoVirtualPorSocio, ordenarCola, conEspera,
+} from "./calc.js";
 
 // ---------------------------------------------------------------------
 // 1 · Config de Firebase (pública por diseño; la protección son las reglas §2)
@@ -68,6 +73,7 @@ const estado = {
   rollos: {},
   impresiones: {},
   ajustes: {},
+  mantenimientos: {},
   config: { ...CONFIG_DEFAULT },
   vista: "inicio",
   verArchivados: false,
@@ -121,6 +127,20 @@ function formatMin(min) {
   return `${m} min`;
 }
 
+const nfDec1 = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 1 });
+const formatHoras = (horas) => nfDec1.format(Math.round(horas * 10) / 10) + " h";
+const formatPct = (frac) => (frac == null ? "—" : Math.round(frac * 100) + "%");
+const formatDesvio = (frac) => {
+  if (frac == null) return "—";
+  const p = Math.round(frac * 100);
+  return (p > 0 ? "+" : "") + p + "%";
+};
+function formatEspera(min) {
+  if (min <= 0) return "arranca ahora";
+  if (min < 60) return `arranca en ~${Math.round(min)} min`;
+  return `arranca en ~${nfDec1.format(Math.round(min / 30) / 2)} h`;
+}
+
 function hexToRgb(hex) {
   const h = String(hex).replace("#", "");
   const n = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
@@ -156,6 +176,9 @@ const ICONOS = {
   archivar: '<path d="M5 8.5V19h14V8.5"/><path d="M3.5 5h17v3.5h-17z"/><path d="M10 12h4"/>',
   printer: '<path d="M7 9V3h10v6"/><path d="M7 18H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/><path d="M7 14h10v6H7z"/>',
   mas: '<circle cx="12" cy="5" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.6" fill="currentColor" stroke="none"/>',
+  reloj: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  llave: '<path d="M13.5 6.5a4 4 0 0 0-5.6 4.9L3 16.3V20h3.7l4.9-4.9a4 4 0 0 0 4.9-5.6L13 13l-2-2z"/>',
+  stats: '<path d="M4 20h16"/><path d="M7 20v-6"/><path d="M12 20V6"/><path d="M17 20v-9"/>',
 };
 function svgIco(name, cls) {
   return `<svg${cls ? ` class="${cls}"` : ""} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONOS[name] || ""}</svg>`;
@@ -270,6 +293,7 @@ function renderVistaActual() {
   if (estado.vista === "inicio") renderInicio();
   else if (estado.vista === "cola") renderCola();
   else if (estado.vista === "stock") renderStock();
+  else if (estado.vista === "stats") renderStats();
 }
 
 function renderTodo() {
@@ -362,12 +386,16 @@ function accionesHtml(estadoImp) {
   return `<button class="boton boton-ghost boton-bloque" data-acc="mas">${svgIco("ajustes")}<span>Ver / editar</span></button>`;
 }
 
-function cardImpresion(id, imp, { hero = false } = {}) {
+function cardImpresion(id, imp, { hero = false, esperaMin = null } = {}) {
   const rollo = imp.rolloId ? estado.rollos[imp.rolloId] : null;
   const card = el("article", "card imp" + (hero ? " encurso" : ""));
   const badges = [];
   if (imp.urgente && imp.estado === "cola") badges.push(`<span class="badge badge-urgente">Urgente</span>`);
   if (imp.estado === "terminada" || imp.estado === "fallida") badges.push(`<span class="badge badge-estado" data-estado="${imp.estado}">${imp.estado}</span>`);
+
+  const espera = esperaMin != null
+    ? `<p class="espera${esperaMin <= 0 ? " ya" : ""}">${svgIco("reloj")} ${esc(formatEspera(esperaMin))}</p>`
+    : "";
 
   card.innerHTML = `
     ${hero ? `<div class="encurso-tag"><span class="pulso"></span> Imprimiendo ahora</div>` : ""}
@@ -378,13 +406,14 @@ function cardImpresion(id, imp, { hero = false } = {}) {
       </div>
       ${badges.length ? `<div class="badges">${badges.join("")}</div>` : ""}
     </div>
+    ${espera}
     <div class="acciones">${accionesHtml(imp.estado)}</div>`;
 
   card.querySelectorAll("[data-acc]").forEach((b) => (b.onclick = () => manejarAccion(b.dataset.acc, id)));
   return card;
 }
 
-function cardRollo(id, r) {
+function cardRollo(id, r, notasAbiertas = false) {
   const cpg = costoPorGramo(r);
   const restante = pesoRestante(id, estado.rollos, estado.impresiones, estado.ajustes);
   const umbral = estado.config.umbralStockBajoGramos ?? 150;
@@ -419,7 +448,7 @@ function cardRollo(id, r) {
       <div class="rollo-cifra"><span class="v">${formatCostoGramo(cpg)}</span><span class="k">$/gramo</span></div>
       <div class="rollo-cifra"><span class="v">${formatMoneda(valorRestante)}</span><span class="k">valor restante</span></div>
     </div>
-    ${r.notasPerfil ? `<details class="expand"><summary>Notas de perfil ${svgIco("chev", "chev")}</summary><div class="rollo-notas"><div class="rollo-notas-lbl">perfil de impresión</div>${esc(r.notasPerfil)}</div></details>` : ""}
+    ${r.notasPerfil ? `<details class="expand" data-rollo="${esc(id)}"${notasAbiertas ? " open" : ""}><summary>Notas de perfil ${svgIco("chev", "chev")}</summary><div class="rollo-notas"><div class="rollo-notas-lbl">perfil de impresión</div>${esc(r.notasPerfil)}</div></details>` : ""}
     <div class="acciones">${r.archivado
       ? `<button class="boton boton-sec boton-bloque" data-acc="desarchivar">${svgIco("atras")}<span>Desarchivar</span></button>`
       : `<button class="boton boton-sec" data-acc="ajustar">${svgIco("ajustes")}<span>Ajustar stock</span></button>
@@ -442,40 +471,121 @@ function renderInicio() {
   const cont = $("#cont-inicio");
   cont.replaceChildren();
   cont.append(h1("Inicio"));
+  const ahora = Date.now();
 
-  const enCurso = Object.entries(estado.impresiones).find(([, i]) => i.estado === "imprimiendo");
-  if (enCurso) {
+  // alerta de mantenimiento (§4.5): horas desde el último vs. límite
+  const limite = estado.config.horasEntreMantenimiento ?? 200;
+  const desdeMant = horasDesdeUltimoMant(estado.impresiones, estado.mantenimientos);
+  if (desdeMant >= limite) {
+    cont.append(el("div", "alerta-mant",
+      `${svgIco("llave")}<div><b>Toca mantenimiento</b><span>${esc(formatHoras(desdeMant))} de uso desde el último — el límite es ${limite} h.</span></div>`));
+  }
+
+  // impresiones en curso con su rollo (puede haber más de una: §4.2 no bloquea)
+  const imprimiendo = Object.entries(estado.impresiones).filter(([, i]) => i.estado === "imprimiendo");
+  if (imprimiendo.length) {
     const s = seccion("En curso");
-    s.append(cardImpresion(enCurso[0], enCurso[1], { hero: true }));
+    imprimiendo.forEach(([id, i]) => s.append(cardImpresion(id, i, { hero: true })));
     cont.append(s);
   } else {
     cont.append(vacio("printer", "Nada en la máquina", "Cuando pongas algo a imprimir, aparece acá y la app toma el color del filamento cargado."));
   }
 
-  const enCola = Object.values(estado.impresiones).filter((i) => i.estado === "cola").length;
-  const rollosAct = Object.values(estado.rollos).filter((r) => !r.archivado).length;
+  // mini-stats: horas totales, tasa de éxito, gasto del mes, en cola
+  const glob = estadisticasGlobales(estado.impresiones);
+  const enColaN = Object.values(estado.impresiones).filter((i) => i.estado === "cola").length;
   const grid = el("div", "mini-stats");
-  const m1 = el("button", "mini-stat", `<span class="mini-stat-num mono">${enCola}</span><span class="mini-stat-lbl">en cola</span>`);
-  m1.onclick = () => irA("cola");
-  const m2 = el("button", "mini-stat", `<span class="mini-stat-num mono">${rollosAct}</span><span class="mini-stat-lbl">rollos activos</span>`);
-  m2.onclick = () => irA("stock");
-  grid.append(m1, m2);
+  const tile = (num, lbl, destino) => {
+    const t = el("button", "mini-stat", `<span class="mini-stat-num mono">${num}</span><span class="mini-stat-lbl">${lbl}</span>`);
+    if (destino) t.onclick = () => irA(destino);
+    return t;
+  };
+  grid.append(
+    tile(esc(formatHoras(horasMaquina(estado.impresiones))), "horas de máquina", "stats"),
+    tile(esc(formatPct(glob.tasaExito)), "tasa de éxito", "stats"),
+    tile(esc(formatMoneda(gastoDelMes(estado.rollos, estado.impresiones, ahora))), "gasto del mes", "stats"),
+    tile(enColaN, "en cola", "cola"),
+  );
   cont.append(grid);
 
-  cont.append(gcode("; dashboard completo — horas, stock y gasto del mes — llega en F3"));
+  // próximos 3 en el orden justo (§4.7)
+  const tv = tiempoVirtualPorSocio(estado.socios, estado.impresiones, estado.config, ahora);
+  const cola = Object.entries(estado.impresiones)
+    .filter(([, i]) => i.estado === "cola")
+    .map(([id, i]) => ({ id, ...i }));
+  if (cola.length) {
+    const ordenadas = ordenarCola(cola, tv);
+    const estPrevio = imprimiendo.reduce((a, [, i]) => a + (i.tiempoEstimadoMin ?? 0), 0);
+    const esperas = conEspera(ordenadas, estPrevio).slice(0, 3);
+    const s = seccion("Próximos en la cola", cola.length);
+    esperas.forEach(({ imp, esperaMin }, i) => {
+      const fila = el("button", "prox",
+        `<span class="prox-n mono">${i + 1}</span>
+         <span class="prox-info"><span class="prox-nombre">${esc(imp.nombre)}</span>
+         <span class="prox-espera">${esc(formatEspera(esperaMin))}</span></span>
+         ${imp.urgente ? '<span class="badge badge-urgente">Urgente</span>' : ""}
+         ${puntosHtml(imp.participantes)}`);
+      fila.onclick = () => irA("cola");
+      s.append(fila);
+    });
+    cont.append(s);
+  }
+
+  // rollos activos: barra de restante + alerta de stock bajo
+  const rollosAct = Object.entries(estado.rollos)
+    .filter(([, r]) => !r.archivado)
+    .sort(([, a], [, b]) => (b.fechaCompra || 0) - (a.fechaCompra || 0));
+  if (rollosAct.length) {
+    const s = seccion("Filamento", rollosAct.length);
+    const umbral = estado.config.umbralStockBajoGramos ?? 150;
+    rollosAct.forEach(([id, r]) => {
+      const rest = pesoRestante(id, estado.rollos, estado.impresiones, estado.ajustes);
+      const pct = r.pesoInicial > 0 ? Math.max(0, Math.min(100, (rest / r.pesoInicial) * 100)) : 0;
+      const neg = rest < 0, bajo = !neg && rest < umbral;
+      const fila = el("button", "rollo-mini",
+        `<span class="swatch swatch-lg" style="background:${esc(r.colorHex || "#888")}"></span>
+         <span class="rollo-mini-info">
+           <span class="rollo-mini-nombre">${esc(r.colorFilamento || r.material)} <i>${esc(r.material)}</i>${neg ? '<em class="mini-alerta neg">sin stock</em>' : bajo ? '<em class="mini-alerta">stock bajo</em>' : ""}</span>
+           <span class="rollo-mini-via"><span class="rollo-mini-fill${neg ? " neg" : ""}" style="width:${pct}%;${neg ? "" : `background:${esc(r.colorHex || "#888")}`}"></span></span>
+         </span>
+         <span class="rollo-mini-g mono${neg ? " txt-neg" : bajo ? " txt-bajo" : ""}">${esc(formatG(rest))}</span>`);
+      fila.onclick = () => irA("stock");
+      s.append(fila);
+    });
+    cont.append(s);
+  }
 }
 
 function renderCola() {
   const cont = $("#cont-cola");
+  // un update remoto no debe cerrarte el historial que estás leyendo
+  const histAbierto = !!cont.querySelector("details.hist[open]");
   cont.replaceChildren();
   cont.append(h1("Cola"));
+  const ahora = Date.now();
 
   const imps = Object.entries(estado.impresiones).map(([id, i]) => ({ id, ...i }));
   const imprimiendo = imps.filter((i) => i.estado === "imprimiendo");
-  const enCola = ordenarColaProvisoria(imps.filter((i) => i.estado === "cola"));
   const historial = imps
     .filter((i) => i.estado === "terminada" || i.estado === "fallida")
     .sort((a, b) => (b.fechaFin || 0) - (a.fechaFin || 0));
+
+  // transparencia del orden (§4.7): tiempo virtual por socio en la ventana
+  const tv = tiempoVirtualPorSocio(estado.socios, estado.impresiones, estado.config, ahora);
+  const dias = estado.config.ventanaEquidadDias ?? 30;
+  const valores = Object.values(tv);
+  const min = Math.min(...valores);
+  // el badge solo tiene sentido con un mínimo único: en empate no hay "prioridad"
+  const minUnico = valores.filter((v) => Math.abs(v - min) <= 1e-6).length === 1;
+  const equidad = el("div", "equidad");
+  equidad.innerHTML = `<span class="equidad-lbl">Últimos ${dias} días</span>` +
+    Object.entries(estado.socios).map(([id, s]) => {
+      const prioridad = minUnico && tv[id] === min;
+      return `<span class="equidad-socio${prioridad ? " turno" : ""}" title="${prioridad ? "Si manda algo ahora, va primero" : ""}">
+        <span class="punto" style="background:${esc(s.color)}"></span>${esc(s.nombre)} <b class="mono">${esc(formatHoras((tv[id] || 0) / 60))}</b>
+      </span>`;
+    }).join("");
+  cont.append(equidad);
 
   if (imprimiendo.length) {
     const s = seccion("En curso");
@@ -483,13 +593,19 @@ function renderCola() {
     cont.append(s);
   }
 
+  // orden justo (§4.7) + espera acumulada por card
+  const enCola = ordenarCola(imps.filter((i) => i.estado === "cola"), tv);
+  const estPrevio = imprimiendo.reduce((a, i) => a + (i.tiempoEstimadoMin ?? 0), 0);
+  const esperas = conEspera(enCola, estPrevio);
+
   const sc = seccion("En cola", enCola.length);
   if (!enCola.length) sc.append(vacio("inbox", "La cola está vacía", "Cargá una impresión con el botón +."));
-  else enCola.forEach((i) => sc.append(cardImpresion(i.id, i)));
+  else esperas.forEach(({ imp, esperaMin }) => sc.append(cardImpresion(imp.id, imp, { esperaMin })));
   cont.append(sc);
 
   if (historial.length) {
     const det = el("details", "hist");
+    det.open = histAbierto;
     const sum = el("summary", "hist-sum", `<span class="seccion-tit">Historial <span class="cuenta">${historial.length}</span></span>${svgIco("chev", "chev")}`);
     const body = el("div", "hist-body seccion");
     historial.forEach((i) => body.append(cardImpresion(i.id, i)));
@@ -500,6 +616,8 @@ function renderCola() {
 
 function renderStock() {
   const cont = $("#cont-stock");
+  // preservar qué notas de perfil están abiertas ante re-renders remotos
+  const abiertas = new Set([...cont.querySelectorAll("details[data-rollo][open]")].map((d) => d.dataset.rollo));
   cont.replaceChildren();
   cont.append(h1("Stock"));
 
@@ -510,7 +628,7 @@ function renderStock() {
 
   const s = seccion("Rollos activos", activos.length);
   if (!activos.length) s.append(vacio("spool", "Todavía no hay rollos", "Cargá tu primer filamento con el botón +."));
-  else activos.forEach((r) => s.append(cardRollo(r.id, r)));
+  else activos.forEach((r) => s.append(cardRollo(r.id, r, abiertas.has(r.id))));
   cont.append(s);
 
   if (archivados.length) {
@@ -519,12 +637,105 @@ function renderStock() {
     cont.append(toggle);
     if (estado.verArchivados) {
       const sa = seccion("Archivados", archivados.length);
-      archivados.forEach((r) => sa.append(cardRollo(r.id, r)));
+      archivados.forEach((r) => sa.append(cardRollo(r.id, r, abiertas.has(r.id))));
       cont.append(sa);
     }
   }
 
   cont.append(gcode("; el stock se deriva de las impresiones y ajustes — cierra contra la balanza"));
+}
+
+function renderStats() {
+  const cont = $("#cont-stats");
+  cont.replaceChildren();
+  cont.append(h1("Estadísticas"));
+  const ahora = Date.now();
+
+  const hayCerradas = Object.values(estado.impresiones).some((i) => i.estado === "terminada" || i.estado === "fallida");
+  const hayRollos = Object.keys(estado.rollos).length > 0;
+  if (!hayCerradas && !hayRollos) {
+    cont.append(vacio("stats", "Todavía no hay datos", "Cargá rollos y terminá impresiones: acá aparecen las horas, el balance y la tasa de éxito."));
+    return;
+  }
+
+  const stats = statsPorSocio(estado.socios, estado.impresiones);
+  const bal = balancePorSocio(estado.socios, estado.rollos, estado.impresiones);
+  const glob = estadisticasGlobales(estado.impresiones);
+
+  // --- por socio: horas, gramos, impresiones + aportado/consumido/neto ---
+  const s1 = seccion("Por socio");
+  for (const [id, socio] of Object.entries(estado.socios)) {
+    const st = stats[id], b = bal[id];
+    const netoCls = b.neto > 0.5 ? "pos" : b.neto < -0.5 ? "neg" : "";
+    const card = el("article", "card socio-card");
+    card.innerHTML = `
+      <div class="socio-cab">
+        <span class="punto" style="background:${esc(socio.color)}"></span>
+        <span class="socio-nombre">${esc(socio.nombre)}</span>
+        <span class="socio-imps mono">${st.cantidad} imp${st.fallidas ? ` · ${st.fallidas} fallida${st.fallidas > 1 ? "s" : ""}` : ""}</span>
+      </div>
+      <div class="socio-cifras">
+        <div class="rollo-cifra"><span class="v">${esc(formatHoras(st.horas))}</span><span class="k">horas</span></div>
+        <div class="rollo-cifra"><span class="v">${esc(formatG(Math.round(st.gramos)))}</span><span class="k">filamento</span></div>
+      </div>
+      <div class="socio-balance">
+        <div class="linea"><span class="k">Aportó</span><span class="mono">${esc(formatMoneda(b.aportado))}</span></div>
+        <div class="linea"><span class="k">Consumió</span><span class="mono">${esc(formatMoneda(Math.round(b.consumido)))}</span></div>
+        <div class="linea neto ${netoCls}"><span class="k">Neto</span><span class="mono">${b.neto > 0.5 ? "+" : ""}${esc(formatMoneda(Math.round(b.neto)))}</span></div>
+      </div>`;
+    s1.append(card);
+  }
+  // aclaración §4.4: los netos no suman cero mientras quede filamento
+  const stockVal = stockValorizado(estado.rollos, estado.impresiones, estado.ajustes);
+  const nota = el("div", "card nota-balance");
+  nota.innerHTML = `
+    <div class="linea-stock"><span>Filamento sin usar (valorizado)</span><b class="mono">${esc(formatMoneda(Math.round(stockVal)))}</b></div>
+    <p class="nota">Los netos no suman cero mientras quede filamento sin usar: la diferencia es el valor del stock restante, que pertenece proporcionalmente a quienes tienen neto positivo. Se saldan cuentas cuando quieran — la app solo muestra los números.</p>`;
+  s1.append(nota);
+  cont.append(s1);
+
+  // --- global ---
+  const s2 = seccion("La máquina");
+  const grid = el("div", "mini-stats");
+  grid.innerHTML = `
+    <div class="mini-stat"><span class="mini-stat-num mono">${esc(formatPct(glob.tasaExito))}</span><span class="mini-stat-lbl">tasa de éxito · ${glob.terminadas} ok, ${glob.fallidas} fallida${glob.fallidas === 1 ? "" : "s"}</span></div>
+    <div class="mini-stat"><span class="mini-stat-num mono">${esc(formatHoras(horasMaquina(estado.impresiones)))}</span><span class="mini-stat-lbl">horas totales</span></div>
+    <div class="mini-stat"><span class="mini-stat-num mono">${esc(formatDesvio(glob.desvioGramos))}</span><span class="mini-stat-lbl">desvío gramos est. vs. real</span></div>
+    <div class="mini-stat"><span class="mini-stat-num mono">${esc(formatDesvio(glob.desvioTiempo))}</span><span class="mini-stat-lbl">desvío tiempo est. vs. real</span></div>`;
+  s2.append(grid);
+
+  // motivos de fallo
+  const motivos = Object.entries(glob.motivos).sort((a, b) => b[1] - a[1]);
+  if (motivos.length) {
+    const maxM = motivos[0][1];
+    const card = el("article", "card");
+    card.innerHTML = `<p class="card-etiqueta">; motivos de fallo</p>` + motivos.map(([k, n]) => `
+      <div class="motivo">
+        <span class="motivo-lbl">${esc(MOTIVOS[k] || k)}</span>
+        <span class="motivo-via"><span class="motivo-fill" style="width:${(n / maxM) * 100}%"></span></span>
+        <span class="motivo-n mono">${n}</span>
+      </div>`).join("");
+    s2.append(card);
+  }
+  cont.append(s2);
+
+  // --- gramos por mes: barras CSS simples (§5.4, sin librerías) ---
+  const meses = gramosPorMes(estado.impresiones, 6, ahora);
+  if (meses.some((m) => m.gramos > 0)) {
+    const maxG = Math.max(...meses.map((m) => m.gramos));
+    const s3 = seccion("Filamento por mes");
+    const card = el("article", "card");
+    card.innerHTML = `<div class="meses">` + meses.map((m) => {
+      const label = new Date(m.anio, m.mes, 1).toLocaleDateString("es-AR", { month: "short" }).replace(".", "");
+      return `<div class="mes">
+        <span class="mes-g mono">${m.gramos ? esc(nfMiles.format(Math.round(m.gramos))) : ""}</span>
+        <span class="mes-via"><span class="mes-fill" style="height:${maxG ? (m.gramos / maxG) * 100 : 0}%"></span></span>
+        <span class="mes-lbl">${esc(label)}</span>
+      </div>`;
+    }).join("") + `</div><p class="nota" style="text-align:center">gramos consumidos por mes</p>`;
+    s3.append(card);
+    cont.append(s3);
+  }
 }
 
 // =====================================================================
@@ -940,33 +1151,38 @@ function toggleUrgente(id, val) {
   toast(val ? "Marcada urgente" : "Urgente quitada");
 }
 
-// Reorden de la sub-cola propia (fractional indexing §4.7)
-function colaNoUrgente() {
-  return ordenarColaProvisoria(
-    Object.entries(estado.impresiones)
-      .filter(([, i]) => i.estado === "cola" && !i.urgente)
-      .map(([id, i]) => ({ id, ...i }))
-  );
+// Reorden de la sub-cola PROPIA (§4.7): `orden` decide cuál de TUS
+// impresiones entra en cada turno tuyo — no la posición global.
+// Fractional indexing: punto medio entre vecinas; frente = primera − 60000.
+function subColaPropia() {
+  const ordenDe = (i) => i.orden ?? i.fechaCreacion ?? 0;
+  return Object.entries(estado.impresiones)
+    .filter(([, i]) => i.estado === "cola" && !i.urgente && i.participantes?.[estado.socioId])
+    .map(([id, i]) => ({ id, ...i }))
+    .sort((a, b) => (ordenDe(a) - ordenDe(b)) || ((a.fechaCreacion || 0) - (b.fechaCreacion || 0)));
 }
 function moverFrente(id) {
-  const lista = colaNoUrgente();
-  const min = lista.length ? lista[0].orden : Date.now();
-  update(ref(db, `impresiones/${id}`), { orden: min - 60000 });
+  const lista = subColaPropia();
+  if (!lista.length || lista[0].id === id) return;
+  update(ref(db, `impresiones/${id}`), { orden: (lista[0].orden ?? lista[0].fechaCreacion) - 60000 });
+  toast("Al frente de tu cola");
 }
 function moverArriba(id) {
-  const lista = colaNoUrgente();
+  const lista = subColaPropia();
   const i = lista.findIndex((x) => x.id === id);
   if (i <= 0) return;
   const prev = lista[i - 1], prevPrev = lista[i - 2];
-  const nuevo = prevPrev ? (prevPrev.orden + prev.orden) / 2 : prev.orden - 60000;
+  const oPrev = prev.orden ?? prev.fechaCreacion;
+  const nuevo = prevPrev ? ((prevPrev.orden ?? prevPrev.fechaCreacion) + oPrev) / 2 : oPrev - 60000;
   update(ref(db, `impresiones/${id}`), { orden: nuevo });
 }
 function moverAbajo(id) {
-  const lista = colaNoUrgente();
+  const lista = subColaPropia();
   const i = lista.findIndex((x) => x.id === id);
   if (i < 0 || i >= lista.length - 1) return;
   const next = lista[i + 1], nextNext = lista[i + 2];
-  const nuevo = nextNext ? (next.orden + nextNext.orden) / 2 : next.orden + 60000;
+  const oNext = next.orden ?? next.fechaCreacion;
+  const nuevo = nextNext ? (oNext + (nextNext.orden ?? nextNext.fechaCreacion)) / 2 : oNext + 60000;
   update(ref(db, `impresiones/${id}`), { orden: nuevo });
 }
 
@@ -1000,9 +1216,9 @@ function accionesImpresion(id) {
     items.push({ label: imp.urgente ? "Quitar urgente" : "Marcar urgente", icon: "flame", onClick: () => toggleUrgente(id, !imp.urgente) });
     if (esMio && !imp.urgente) {
       items.push("sep");
-      items.push({ label: "Mandar al frente", icon: "frente", onClick: () => moverFrente(id) });
-      items.push({ label: "Subir", icon: "arriba", onClick: () => moverArriba(id) });
-      items.push({ label: "Bajar", icon: "abajo", onClick: () => moverAbajo(id) });
+      items.push({ label: "Al frente de mis impresiones", icon: "frente", onClick: () => moverFrente(id) });
+      items.push({ label: "Subir entre las mías", icon: "arriba", onClick: () => moverArriba(id) });
+      items.push({ label: "Bajar entre las mías", icon: "abajo", onClick: () => moverAbajo(id) });
     }
     items.push("sep");
     items.push({ label: "Editar", icon: "editar", onClick: () => editarImpresion(id) });
@@ -1076,7 +1292,12 @@ function escucharNodos() {
     const socios = snap.val();
     if (!socios) { set(ref(db, "socios"), SOCIOS_DEFAULT); return; }
     estado.socios = socios;
-    if (estado.socioId && !estado.socios[estado.socioId]) estado.socioId = null;
+    if (estado.socioId && !estado.socios[estado.socioId]) {
+      // el socio guardado ya no existe: limpiar y volver a preguntar
+      estado.socioId = null;
+      localStorage.removeItem("printlog_socio");
+      abrirSelector();
+    }
     renderSelector();
     renderTodo();
   });
@@ -1084,6 +1305,7 @@ function escucharNodos() {
   onValue(ref(db, "rollos"), (snap) => { estado.rollos = snap.val() || {}; renderTodo(); });
   onValue(ref(db, "impresiones"), (snap) => { estado.impresiones = snap.val() || {}; renderTodo(); });
   onValue(ref(db, "ajustes"), (snap) => { estado.ajustes = snap.val() || {}; renderTodo(); });
+  onValue(ref(db, "mantenimientos"), (snap) => { estado.mantenimientos = snap.val() || {}; renderTodo(); });
 
   onValue(ref(db, "config"), (snap) => {
     const c = snap.val();
@@ -1102,7 +1324,10 @@ function renderEstadoConexion(clave, texto) {
 // 13 · Arranque
 // =====================================================================
 function iniciar() {
-  if (estado.socioId && !estado.socios[estado.socioId]) estado.socioId = null;
+  if (estado.socioId && !estado.socios[estado.socioId]) {
+    estado.socioId = null;
+    localStorage.removeItem("printlog_socio");
+  }
 
   $$(".tab").forEach((t) => (t.onclick = () => renderVista(t.dataset.vista)));
   $("#chip-socio").onclick = abrirSelector;
