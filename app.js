@@ -14,7 +14,7 @@ import {
   getDatabase, ref, onValue, set, push, update, remove,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
-import { costoPorGramo, ordenarColaProvisoria } from "./calc.js";
+import { costoPorGramo, ordenarColaProvisoria, pesoRestante } from "./calc.js";
 
 // ---------------------------------------------------------------------
 // 1 · Config de Firebase (pública por diseño; la protección son las reglas §2)
@@ -50,6 +50,15 @@ const MOTIVOS = {
   otro: "Otro",
 };
 
+// Defaults de configuración (§3). Se seedean en RTDB si el nodo no existe.
+const CONFIG_DEFAULT = {
+  horasEntreMantenimiento: 200,
+  umbralStockBajoGramos: 150,
+  pesoCarreteVacio: 200,
+  ventanaEquidadDias: 30,
+  moneda: "ARS",
+};
+
 // ---------------------------------------------------------------------
 // 3 · Estado global mínimo
 // ---------------------------------------------------------------------
@@ -58,7 +67,10 @@ const estado = {
   socios: SOCIOS_DEFAULT,
   rollos: {},
   impresiones: {},
+  ajustes: {},
+  config: { ...CONFIG_DEFAULT },
   vista: "inicio",
+  verArchivados: false,
 };
 
 let db = null;
@@ -141,6 +153,7 @@ const ICONOS = {
   chev: '<path d="m6 9 6 6 6-6"/>',
   inbox: '<path d="M4 13h4l1.5 2.5h5L16 13h4"/><path d="M5.5 6h13l2.5 7v5.5H3V13z"/>',
   spool: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.6"/>',
+  archivar: '<path d="M5 8.5V19h14V8.5"/><path d="M3.5 5h17v3.5h-17z"/><path d="M10 12h4"/>',
   printer: '<path d="M7 9V3h10v6"/><path d="M7 18H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/><path d="M7 14h10v6H7z"/>',
   mas: '<circle cx="12" cy="5" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.6" fill="currentColor" stroke="none"/>',
 };
@@ -372,8 +385,19 @@ function cardImpresion(id, imp, { hero = false } = {}) {
 }
 
 function cardRollo(id, r) {
-  const card = el("article", "card rollo");
   const cpg = costoPorGramo(r);
+  const restante = pesoRestante(id, estado.rollos, estado.impresiones, estado.ajustes);
+  const umbral = estado.config.umbralStockBajoGramos ?? 150;
+  const pct = r.pesoInicial > 0 ? Math.max(0, Math.min(100, (restante / r.pesoInicial) * 100)) : 0;
+  const negativo = restante < 0;
+  const bajo = !negativo && restante < umbral;
+  const valorRestante = Math.max(0, restante) * cpg;
+
+  let alerta = "";
+  if (negativo) alerta = `<span class="stock-alerta neg">Sin stock — pesá y ajustá</span>`;
+  else if (bajo) alerta = `<span class="stock-alerta bajo">Stock bajo</span>`;
+
+  const card = el("article", "card rollo" + (r.archivado ? " archivado" : ""));
   card.innerHTML = `
     <div class="card-cab">
       <span class="rollo-color" style="background:${esc(r.colorHex || "#888")}"></span>
@@ -381,16 +405,33 @@ function cardRollo(id, r) {
         <div class="card-tit">${esc(r.colorFilamento || r.material)} <span class="card-sub" style="display:inline">${esc(r.material)}</span></div>
         <div class="card-sub">${esc(r.marca || "sin marca")} · lo compró ${esc(nombreSocio(r.compradoPor))}</div>
       </div>
+      ${alerta}
+    </div>
+    <div class="rollo-barra">
+      <div class="rollo-barra-via"><span class="rollo-barra-fill${negativo ? " neg" : ""}" style="width:${pct}%;${negativo ? "" : `background:${esc(r.colorHex || "#888")}`}"></span></div>
+      <div class="rollo-barra-meta">
+        <span><b class="${negativo ? "txt-neg" : ""}">${formatG(restante)}</b> de ${formatG(r.pesoInicial)}</span>
+        <span class="mono">${r.pesoInicial > 0 ? Math.round(pct) : 0}%</span>
+      </div>
     </div>
     <div class="rollo-cifras">
-      <div class="rollo-cifra"><span class="v">${formatG(r.pesoInicial)}</span><span class="k">peso inicial</span></div>
       <div class="rollo-cifra"><span class="v">${formatMoneda(r.costo)}</span><span class="k">costo</span></div>
       <div class="rollo-cifra"><span class="v">${formatCostoGramo(cpg)}</span><span class="k">$/gramo</span></div>
+      <div class="rollo-cifra"><span class="v">${formatMoneda(valorRestante)}</span><span class="k">valor restante</span></div>
     </div>
     ${r.notasPerfil ? `<details class="expand"><summary>Notas de perfil ${svgIco("chev", "chev")}</summary><div class="rollo-notas"><div class="rollo-notas-lbl">perfil de impresión</div>${esc(r.notasPerfil)}</div></details>` : ""}
-    <div class="acciones"><button class="boton boton-ghost boton-bloque" data-acc="editar-rollo">${svgIco("editar")}<span>Editar rollo</span></button></div>`;
+    <div class="acciones">${r.archivado
+      ? `<button class="boton boton-sec boton-bloque" data-acc="desarchivar">${svgIco("atras")}<span>Desarchivar</span></button>`
+      : `<button class="boton boton-sec" data-acc="ajustar">${svgIco("ajustes")}<span>Ajustar stock</span></button>
+         <button class="boton boton-sec boton-mas" data-acc="mas-rollo" aria-label="Más acciones">${svgIco("mas")}</button>`
+    }</div>`;
 
-  card.querySelector("[data-acc]").onclick = () => editarRollo(id);
+  card.querySelectorAll("[data-acc]").forEach((b) => (b.onclick = () => {
+    const a = b.dataset.acc;
+    if (a === "ajustar") pedirAjuste(id);
+    else if (a === "mas-rollo") accionesRollo(id);
+    else if (a === "desarchivar") desarchivarRollo(id);
+  }));
   return card;
 }
 
@@ -462,17 +503,28 @@ function renderStock() {
   cont.replaceChildren();
   cont.append(h1("Stock"));
 
-  const rollos = Object.entries(estado.rollos)
-    .filter(([, r]) => !r.archivado)
-    .map(([id, r]) => ({ id, ...r }))
-    .sort((a, b) => (b.fechaCompra || 0) - (a.fechaCompra || 0));
+  const todos = Object.entries(estado.rollos).map(([id, r]) => ({ id, ...r }));
+  const porFecha = (a, b) => (b.fechaCompra || 0) - (a.fechaCompra || 0);
+  const activos = todos.filter((r) => !r.archivado).sort(porFecha);
+  const archivados = todos.filter((r) => r.archivado).sort(porFecha);
 
-  const s = seccion("Rollos activos", rollos.length);
-  if (!rollos.length) s.append(vacio("spool", "Todavía no hay rollos", "Cargá tu primer filamento con el botón +."));
-  else rollos.forEach((r) => s.append(cardRollo(r.id, r)));
+  const s = seccion("Rollos activos", activos.length);
+  if (!activos.length) s.append(vacio("spool", "Todavía no hay rollos", "Cargá tu primer filamento con el botón +."));
+  else activos.forEach((r) => s.append(cardRollo(r.id, r)));
   cont.append(s);
 
-  cont.append(gcode("; stock derivado por gramos, ajuste por pesada y archivado — llegan en F2"));
+  if (archivados.length) {
+    const toggle = el("button", "toggle-archivados", `${estado.verArchivados ? "Ocultar" : "Ver"} archivados (${archivados.length})`);
+    toggle.onclick = () => { estado.verArchivados = !estado.verArchivados; renderStock(); };
+    cont.append(toggle);
+    if (estado.verArchivados) {
+      const sa = seccion("Archivados", archivados.length);
+      archivados.forEach((r) => sa.append(cardRollo(r.id, r)));
+      cont.append(sa);
+    }
+  }
+
+  cont.append(gcode("; el stock se deriva de las impresiones y ajustes — cierra contra la balanza"));
 }
 
 // =====================================================================
@@ -696,6 +748,102 @@ function editarRollo(id) {
   });
 }
 
+// Ajuste manual por pesada (§4.6): la balanza mide filamento + carrete;
+// se resta el carrete y se corrige contra el restante derivado actual.
+function formAjuste(id) {
+  const restanteActual = pesoRestante(id, estado.rollos, estado.impresiones, estado.ajustes);
+  const carrete0 = estado.config.pesoCarreteVacio ?? 200;
+  const hoy = new Date().toLocaleDateString("es-AR", { day: "numeric", month: "numeric" });
+  const form = el("form", "form");
+  form.innerHTML = `
+    <div class="ajuste-info">Ahora la app calcula <b>${formatG(restanteActual)}</b> de filamento en este rollo.</div>
+    <div class="campo">
+      <label class="campo-lbl" for="a-med">Peso medido con carrete</label>
+      <div class="sufijo"><input id="a-med" class="num" type="number" inputmode="numeric" min="0" placeholder="ej. 640"><span class="u">g</span></div>
+      <p class="campo-ayuda">Poné el rollo entero en la balanza de cocina.</p>
+    </div>
+    <div class="campo">
+      <label class="campo-lbl" for="a-car">Peso del carrete vacío</label>
+      <div class="sufijo"><input id="a-car" class="num" type="number" inputmode="numeric" min="0" value="${carrete0}"><span class="u">g</span></div>
+      <p class="campo-ayuda">El carrete solo, sin filamento. Queda guardado para la próxima.</p>
+    </div>
+    <div class="ajuste-preview">
+      <div class="linea"><span class="k">Filamento medido</span><span id="a-fil">—</span></div>
+      <div class="linea"><span class="k">La app tenía</span><span>${formatG(restanteActual)}</span></div>
+      <div class="linea"><span class="k">Corrección</span><span class="delta cero" id="a-delta">—</span></div>
+    </div>
+    <div class="campo">
+      <label class="campo-lbl" for="a-mot">Motivo</label>
+      <input id="a-mot" type="text" value="Pesada del ${hoy}" autocomplete="off">
+    </div>`;
+
+  const med = form.querySelector("#a-med");
+  const car = form.querySelector("#a-car");
+  const filEl = form.querySelector("#a-fil");
+  const deltaEl = form.querySelector("#a-delta");
+  const recalcular = () => {
+    const m = parseInt(med.value, 10);
+    const c = parseInt(car.value, 10) || 0;
+    if (Number.isNaN(m)) { filEl.textContent = "—"; deltaEl.textContent = "—"; deltaEl.className = "delta cero"; return; }
+    const fil = m - c;
+    const delta = fil - restanteActual;
+    filEl.textContent = formatG(fil);
+    deltaEl.textContent = (delta > 0 ? "+" : "") + formatG(delta);
+    deltaEl.className = "delta " + (delta > 0 ? "mas" : delta < 0 ? "menos" : "cero");
+  };
+  med.addEventListener("input", recalcular);
+  car.addEventListener("input", recalcular);
+
+  const leer = () => {
+    const m = parseInt(med.value, 10);
+    if (Number.isNaN(m) || m < 0) return marcarError(med, "Poné el peso medido");
+    const c = parseInt(car.value, 10) || 0;
+    return {
+      deltaGramos: (m - c) - restanteActual,
+      pesoCarreteVacio: c,
+      motivo: form.querySelector("#a-mot").value.trim() || `Pesada del ${hoy}`,
+    };
+  };
+  return { el: form, leer };
+}
+
+function pedirAjuste(id) {
+  if (!requiereConexion()) return;
+  const f = formAjuste(id);
+  abrirHoja({
+    titulo: "Ajustar stock", cuerpoEl: f.el, textoGuardar: "Guardar ajuste",
+    guardar: async () => {
+      const d = f.leer(); if (!d) return;
+      await push(ref(db, "ajustes"), { rolloId: id, deltaGramos: d.deltaGramos, motivo: d.motivo, fecha: Date.now(), hechoPor: estado.socioId });
+      if (d.pesoCarreteVacio !== estado.config.pesoCarreteVacio) await update(ref(db, "config"), { pesoCarreteVacio: d.pesoCarreteVacio });
+      overlayHide(); toast("Stock ajustado");
+    },
+  });
+}
+
+function accionesRollo(id) {
+  const r = estado.rollos[id]; if (!r) return;
+  abrirAcciones(r.colorFilamento || r.material, [
+    { label: "Editar rollo", icon: "editar", onClick: () => editarRollo(id) },
+    { label: "Archivar rollo", icon: "archivar", onClick: () => archivarRollo(id) },
+  ]);
+}
+async function archivarRollo(id) {
+  const r = estado.rollos[id]; if (!r) return;
+  const ok = await confirmar({
+    titulo: "Archivar rollo",
+    mensaje: `<b>${esc(r.colorFilamento || r.material)}</b> sale del stock activo, pero sigue contando en históricos y balances. Lo podés desarchivar cuando quieras.`,
+    ok: "Archivar",
+  });
+  if (!ok) return;
+  await update(ref(db, `rollos/${id}`), { archivado: true });
+  toast("Rollo archivado");
+}
+function desarchivarRollo(id) {
+  update(ref(db, `rollos/${id}`), { archivado: false });
+  toast("Rollo desarchivado");
+}
+
 function nuevaImpresion() {
   if (!requiereConexion()) return;
   const f = formImpresion();
@@ -731,16 +879,27 @@ function editarImpresion(id) {
 
 async function empezar(id) {
   const imp = estado.impresiones[id]; if (!imp) return;
+  const avisos = [];
+
   const otra = Object.entries(estado.impresiones).find(([iid, i]) => iid !== id && i.estado === "imprimiendo");
-  if (otra) {
+  if (otra) avisos.push(`Ya hay algo imprimiendo: <b>${esc(otra[1].nombre)}</b>. Hay una sola máquina.`);
+
+  // Warning por stock insuficiente (§4.2) — ahora sí, con el stock derivado (§4.1).
+  if (imp.rolloId && imp.gramosEstimados != null) {
+    const rest = pesoRestante(imp.rolloId, estado.rollos, estado.impresiones, estado.ajustes);
+    if (imp.gramosEstimados > rest) {
+      avisos.push(`Al rollo le quedan <b>${formatG(rest)}</b> y esta impresión estima <b>${formatG(imp.gramosEstimados)}</b>.`);
+    }
+  }
+
+  if (avisos.length) {
     const ok = await confirmar({
-      titulo: "Ya hay algo imprimiendo",
-      mensaje: `Está en curso <b>${esc(otra[1].nombre)}</b>. Hay una sola máquina. ¿Igual marcás esta como imprimiendo?`,
-      ok: "Sí, empezar",
+      titulo: "Ojo antes de empezar",
+      mensaje: avisos.join("<br>") + "<br><br>¿Empezar igual?",
+      ok: "Empezar igual",
     });
     if (!ok) return;
   }
-  // El warning por stock insuficiente (gramosEstimados > pesoRestante) llega en F2 (necesita el stock derivado §4.1).
   await update(ref(db, `impresiones/${id}`), { estado: "imprimiendo" });
   toast("En marcha");
 }
@@ -924,6 +1083,14 @@ function escucharNodos() {
 
   onValue(ref(db, "rollos"), (snap) => { estado.rollos = snap.val() || {}; renderTodo(); });
   onValue(ref(db, "impresiones"), (snap) => { estado.impresiones = snap.val() || {}; renderTodo(); });
+  onValue(ref(db, "ajustes"), (snap) => { estado.ajustes = snap.val() || {}; renderTodo(); });
+
+  onValue(ref(db, "config"), (snap) => {
+    const c = snap.val();
+    if (!c) { set(ref(db, "config"), CONFIG_DEFAULT); return; } // seed idempotente
+    estado.config = { ...CONFIG_DEFAULT, ...c };
+    renderTodo();
+  });
 }
 
 function renderEstadoConexion(clave, texto) {

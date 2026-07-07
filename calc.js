@@ -11,6 +11,40 @@ export function costoPorGramo(rollo) {
   return rollo.costo / rollo.pesoInicial;
 }
 
+// Gramos reales consumidos de un rollo: solo impresiones cerradas
+// (terminadas + fallidas) con gramosReales cargados (§4.1).
+export function consumidoRollo(rolloId, impresiones) {
+  let total = 0;
+  for (const imp of Object.values(impresiones || {})) {
+    if (imp.rolloId === rolloId &&
+        (imp.estado === "terminada" || imp.estado === "fallida") &&
+        imp.gramosReales != null) {
+      total += imp.gramosReales;
+    }
+  }
+  return total;
+}
+
+// Suma de correcciones manuales (pesadas) de un rollo (§4.6).
+export function ajusteRollo(rolloId, ajustes) {
+  let total = 0;
+  for (const aj of Object.values(ajustes || {})) {
+    if (aj.rolloId === rolloId) total += aj.deltaGramos || 0;
+  }
+  return total;
+}
+
+// Peso restante DERIVADO (§4.1) — LA decisión de arquitectura.
+// Nunca se guarda como campo mutable: se recalcula siempre.
+//   pesoRestante = pesoInicial − Σ gramosReales + Σ deltaGramos
+export function pesoRestante(rolloId, rollos, impresiones, ajustes) {
+  const rollo = (rollos || {})[rolloId];
+  if (!rollo) return 0;
+  return (rollo.pesoInicial || 0)
+    - consumidoRollo(rolloId, impresiones)
+    + ajusteRollo(rolloId, ajustes);
+}
+
 // Orden provisorio de la cola (§7 · F1): urgentes primero (más viejas
 // arriba), el resto por el campo `orden` que el socio controla a mano.
 // En F3 lo reemplaza ordenarCola() con el orden justo por equidad (§4.7).
