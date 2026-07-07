@@ -17,12 +17,15 @@
 <div class="app">
 
   <header class="topbar">
-    <p class="marca">PRINTLOG<span class="marca-fase">F3</span></p>
+    <p class="marca">PRINTLOG<span class="marca-fase">F4</span></p>
     <div class="topbar-der">
       <span class="estado" id="estado-conexion" data-estado="pendiente">
         <span class="estado-punto" aria-hidden="true"></span>
         <span class="estado-texto" id="estado-texto">…</span>
       </span>
+      <button class="chip-icono" id="btn-config" aria-label="Configuración" title="Configuración">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
       <button class="chip-socio" id="chip-socio" hidden aria-label="Cambiar de socio" title="Cambiar de socio">
         <span class="chip-color" id="chip-color" aria-hidden="true"></span>
         <span class="chip-nombre" id="chip-nombre"></span>
@@ -37,10 +40,7 @@
 
     <section class="vista" data-vista="stats" hidden><div id="cont-stats"></div></section>
 
-    <section class="vista" data-vista="wishlist" hidden>
-      <h1 class="vista-titulo">Wishlist</h1>
-      <p class="gcode">; ideas con votos — llega en F4</p>
-    </section>
+    <section class="vista" data-vista="wishlist" hidden><div id="cont-wishlist"></div></section>
   </main>
 
   <button class="fab" id="fab" hidden>

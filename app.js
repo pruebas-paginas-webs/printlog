@@ -11,7 +11,7 @@ import {
   getAuth, signInAnonymously, onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  getDatabase, ref, onValue, set, push, update, remove,
+  getDatabase, ref, onValue, set, push, update, remove, get,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 import {
@@ -74,9 +74,11 @@ const estado = {
   impresiones: {},
   ajustes: {},
   mantenimientos: {},
+  wishlist: {},
   config: { ...CONFIG_DEFAULT },
   vista: "inicio",
   verArchivados: false,
+  verImpresos: false,
 };
 
 let db = null;
@@ -179,6 +181,10 @@ const ICONOS = {
   reloj: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
   llave: '<path d="M13.5 6.5a4 4 0 0 0-5.6 4.9L3 16.3V20h3.7l4.9-4.9a4 4 0 0 0 4.9-5.6L13 13l-2-2z"/>',
   stats: '<path d="M4 20h16"/><path d="M7 20v-6"/><path d="M12 20V6"/><path d="M17 20v-9"/>',
+  estrella: '<path d="M12 3.6l2.5 5.1 5.6.8-4.05 3.95.95 5.55L12 16.9l-5 2.65.95-5.55L3.4 9.5l5.6-.8z"/>',
+  camara: '<path d="M4.5 8.5A1.5 1.5 0 0 1 6 7h1.8L9 5h6l1.2 2H18a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 18 19H6a1.5 1.5 0 0 1-1.5-1.5z"/><circle cx="12" cy="12.6" r="3.1"/>',
+  descarga: '<path d="M12 4v10"/><path d="m8 11 4 4 4-4"/><path d="M5 19h14"/>',
+  enlace: '<path d="M9.5 14.5 14.5 9.5"/><path d="M12.6 7.4 14 6a3.4 3.4 0 0 1 4.8 4.8L17.4 12.2"/><path d="M11.4 16.6 10 18a3.4 3.4 0 0 1-4.8-4.8L6.6 11.8"/>',
 };
 function svgIco(name, cls) {
   return `<svg${cls ? ` class="${cls}"` : ""} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONOS[name] || ""}</svg>`;
@@ -294,6 +300,7 @@ function renderVistaActual() {
   else if (estado.vista === "cola") renderCola();
   else if (estado.vista === "stock") renderStock();
   else if (estado.vista === "stats") renderStats();
+  else if (estado.vista === "wishlist") renderWishlist();
 }
 
 function renderTodo() {
@@ -304,8 +311,9 @@ function renderTodo() {
 
 function renderFab(nombre) {
   const fab = $("#fab");
-  if (nombre === "cola") { fab.hidden = false; $("#fab-texto").textContent = "Impresión"; fab.onclick = nuevaImpresion; }
+  if (nombre === "cola") { fab.hidden = false; $("#fab-texto").textContent = "Impresión"; fab.onclick = () => nuevaImpresion(); }
   else if (nombre === "stock") { fab.hidden = false; $("#fab-texto").textContent = "Rollo"; fab.onclick = nuevoRollo; }
+  else if (nombre === "wishlist") { fab.hidden = false; $("#fab-texto").textContent = "Idea"; fab.onclick = nuevaIdea; }
   else fab.hidden = true;
 }
 
@@ -397,9 +405,14 @@ function cardImpresion(id, imp, { hero = false, esperaMin = null } = {}) {
     ? `<p class="espera${esperaMin <= 0 ? " ya" : ""}">${svgIco("reloj")} ${esc(formatEspera(esperaMin))}</p>`
     : "";
 
+  const thumb = imp.fotoBase64
+    ? `<button class="imp-thumb" data-acc="foto" aria-label="Ver foto de ${esc(imp.nombre)}"><img src="${esc(imp.fotoBase64)}" alt=""></button>`
+    : "";
+
   card.innerHTML = `
     ${hero ? `<div class="encurso-tag"><span class="pulso"></span> Imprimiendo ahora</div>` : ""}
     <div class="card-cab">
+      ${thumb}
       <div class="imp-info">
         <div class="card-tit">${esc(imp.nombre)}</div>
         <div class="imp-meta">${metaImpresion(imp, rollo)}</div>
@@ -477,8 +490,12 @@ function renderInicio() {
   const limite = estado.config.horasEntreMantenimiento ?? 200;
   const desdeMant = horasDesdeUltimoMant(estado.impresiones, estado.mantenimientos);
   if (desdeMant >= limite) {
-    cont.append(el("div", "alerta-mant",
-      `${svgIco("llave")}<div><b>Toca mantenimiento</b><span>${esc(formatHoras(desdeMant))} de uso desde el último — el límite es ${limite} h.</span></div>`));
+    const alerta = el("div", "alerta-mant",
+      `${svgIco("llave")}<div><b>Toca mantenimiento</b><span>${esc(formatHoras(desdeMant))} de uso desde el último — el límite es ${limite} h.</span></div>`);
+    const bMant = boton("Registrar", "boton-sec");
+    bMant.onclick = registrarMantenimiento;
+    alerta.append(bMant);
+    cont.append(alerta);
   }
 
   // impresiones en curso con su rollo (puede haber más de una: §4.2 no bloquea)
@@ -717,6 +734,20 @@ function renderStats() {
       </div>`).join("");
     s2.append(card);
   }
+
+  // último mantenimiento (§4.5)
+  const mants = Object.values(estado.mantenimientos || {});
+  if (mants.length) {
+    const ult = mants.reduce((a, m) => (!a || (m.fecha || 0) > (a.fecha || 0) ? m : a), null);
+    const desde = Math.max(0, horasDesdeUltimoMant(estado.impresiones, estado.mantenimientos));
+    const card = el("article", "card mant-card",
+      `${svgIco("llave")}<div class="mant-info">
+        <span class="mant-tit">Último mantenimiento</span>
+        <span class="mant-detalle"><b>${esc(ult.tipo)}</b> · hace ${esc(formatHoras(desde))} de uso · ${esc(formatFecha(ult.fecha))}</span>
+        ${ult.notas ? `<span class="mant-notas">${esc(ult.notas)}</span>` : ""}
+      </div>`);
+    s2.append(card);
+  }
   cont.append(s2);
 
   // --- gramos por mes: barras CSS simples (§5.4, sin librerías) ---
@@ -738,6 +769,105 @@ function renderStats() {
   }
 }
 
+// --- Wishlist (§5.5): ideas con votos + galería de terminadas ---
+function cardWishlist(id, it) {
+  const votos = it.votos || {};
+  const n = Object.keys(votos).length;
+  const vote = !!votos[estado.socioId];
+  const card = el("article", "card wish" + (it.impreso ? " impreso" : ""));
+  card.innerHTML = `
+    <div class="wish-cab">
+      <div class="wish-info">
+        <div class="card-tit">${esc(it.nombre)}</div>
+        <div class="wish-meta">
+          ${it.link ? `<a class="wish-link" href="${esc(it.link)}" target="_blank" rel="noopener">${svgIco("enlace")}<span>ver modelo</span></a>` : ""}
+          <span class="wish-por">lo propuso ${esc(nombreSocio(it.propuestoPor))}</span>
+        </div>
+        <div class="wish-votos">${n ? `${puntosHtml(votos)}<span class="wish-votos-lbl">${n} voto${n === 1 ? "" : "s"}</span>` : `<span class="wish-sin">sin votos todavía</span>`}</div>
+      </div>
+      <button class="voto-btn${vote ? " activo" : ""}" data-acc="votar" aria-pressed="${vote}" aria-label="${vote ? "Quitar mi voto" : "Votar esta idea"}">
+        ${svgIco("estrella")}<span class="voto-n mono">${n}</span>
+      </button>
+    </div>
+    <div class="acciones">
+      ${it.impreso
+        ? `<button class="boton boton-sec boton-bloque" data-acc="reproponer">${svgIco("atras")}<span>Volver a proponer</span></button>`
+        : `<button class="boton boton-primario" data-acc="mandar">${svgIco("printer")}<span>Mandar a la cola</span></button>`}
+      <button class="boton boton-sec boton-mas" data-acc="mas-wish" aria-label="Más acciones">${svgIco("mas")}</button>
+    </div>`;
+  card.querySelectorAll("[data-acc]").forEach((b) => (b.onclick = () => {
+    const a = b.dataset.acc;
+    if (a === "votar") toggleVoto(id);
+    else if (a === "mandar") mandarACola(id);
+    else if (a === "reproponer") reproponerIdea(id);
+    else if (a === "mas-wish") accionesWishlist(id);
+  }));
+  return card;
+}
+
+function renderWishlist() {
+  const cont = $("#cont-wishlist");
+  cont.replaceChildren();
+  cont.append(h1("Wishlist"));
+
+  const items = Object.entries(estado.wishlist).map(([id, it]) => ({ id, ...it }));
+  const nVotos = (it) => Object.keys(it.votos || {}).length;
+  const pendientes = items.filter((it) => !it.impreso)
+    .sort((a, b) => (nVotos(b) - nVotos(a)) || ((a.fecha || 0) - (b.fecha || 0)));
+  const impresos = items.filter((it) => it.impreso).sort((a, b) => (b.fecha || 0) - (a.fecha || 0));
+
+  const s = seccion("Ideas", pendientes.length || null);
+  if (!pendientes.length) s.append(vacio("estrella", "Todavía no hay ideas", "Cargá algo que quieran imprimir con el botón +. Se vota entre los tres y sale la más votada."));
+  else pendientes.forEach((it) => s.append(cardWishlist(it.id, it)));
+  cont.append(s);
+
+  if (impresos.length) {
+    const toggle = el("button", "toggle-archivados", `${estado.verImpresos ? "Ocultar" : "Ver"} ya impresas (${impresos.length})`);
+    toggle.onclick = () => { estado.verImpresos = !estado.verImpresos; renderWishlist(); };
+    cont.append(toggle);
+    if (estado.verImpresos) {
+      const si = seccion("Ya impresas", impresos.length);
+      impresos.forEach((it) => si.append(cardWishlist(it.id, it)));
+      cont.append(si);
+    }
+  }
+
+  // galería de fotos de terminadas (§5.5, al pie)
+  const conFoto = Object.entries(estado.impresiones)
+    .filter(([, i]) => i.estado === "terminada" && i.fotoBase64)
+    .map(([id, i]) => ({ id, ...i }))
+    .sort((a, b) => (b.fechaFin || 0) - (a.fechaFin || 0));
+  if (conFoto.length) {
+    const sg = seccion("Terminadas con foto", conFoto.length);
+    const grid = el("div", "galeria");
+    conFoto.forEach((i) => {
+      const b = el("button", "galeria-item");
+      b.innerHTML = `<img src="${esc(i.fotoBase64)}" alt="${esc(i.nombre)}" loading="lazy">`;
+      b.setAttribute("aria-label", `Ver foto de ${i.nombre}`);
+      b.onclick = () => verFoto(i.id);
+      grid.append(b);
+    });
+    sg.append(grid);
+    cont.append(sg);
+  }
+}
+
+// Visor de foto grande (overlay centrado, patrón existente)
+function verFoto(id) {
+  const i = estado.impresiones[id];
+  if (!i || !i.fotoBase64) return;
+  const box = el("div", "foto-visor");
+  box.innerHTML = `
+    <button class="foto-cerrar" aria-label="Cerrar">${svgIco("x")}</button>
+    <img class="foto-grande" src="${esc(i.fotoBase64)}" alt="${esc(i.nombre)}">
+    <div class="foto-pie">
+      <span class="foto-nombre">${esc(i.nombre)}</span>
+      ${i.fechaFin ? `<span class="foto-fecha mono">${esc(formatFecha(i.fechaFin))}</span>` : ""}
+    </div>`;
+  box.querySelector(".foto-cerrar").onclick = overlayHide;
+  overlayAbrir(box, { cerrable: true, centrar: true });
+}
+
 // =====================================================================
 // 9 · Formularios (cada uno devuelve { el, leer })
 // =====================================================================
@@ -748,6 +878,75 @@ function marcarError(input, msg) {
 }
 const sociosOptions = (sel) =>
   Object.entries(estado.socios).map(([id, s]) => `<option value="${id}" ${id === sel ? "selected" : ""}>${esc(s.nombre)}</option>`).join("");
+
+// Compresión client-side (§2): canvas, lado mayor ≤800px, JPEG q0.7 → dataURL.
+// Si pesa > 100 KB reintenta con q0.5; si sigue > 150 KB (límite duro) devuelve null.
+// Aproximamos los bytes con dataURL.length (§2, decisión de la spec).
+async function comprimirFoto(file) {
+  if (!file || !file.type?.startsWith("image/")) return null;
+  const dataUrl = await new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onload = () => res(fr.result);
+    fr.onerror = rej;
+    fr.readAsDataURL(file);
+  });
+  const img = await new Promise((res, rej) => {
+    const im = new Image();
+    im.onload = () => res(im);
+    im.onerror = rej;
+    im.src = dataUrl;
+  });
+  const MAX = 800;
+  let w = img.naturalWidth || img.width;
+  let h = img.naturalHeight || img.height;
+  if (w > MAX || h > MAX) {
+    if (w >= h) { h = Math.round((h * MAX) / w); w = MAX; }
+    else { w = Math.round((w * MAX) / h); h = MAX; }
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = w; canvas.height = h;
+  canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+  let out = canvas.toDataURL("image/jpeg", 0.7);
+  if (out.length > 100 * 1024) out = canvas.toDataURL("image/jpeg", 0.5);
+  if (out.length > 150 * 1024) return null;
+  return out;
+}
+
+// Campo de foto reutilizable (cierre de terminada + agregar/cambiar desde historial).
+// Devuelve { el, get } — get() da el dataURL actual (o null). Comprime al elegir.
+function campoFoto(inicial) {
+  let fotoData = inicial || null;
+  const wrap = el("div", "campo");
+  wrap.innerHTML = `
+    <label class="campo-lbl">Foto <span class="opt">· opcional</span></label>
+    <div class="foto-campo">
+      <div class="foto-prev" hidden><img alt=""><button type="button" class="foto-quitar" aria-label="Quitar foto">${svgIco("x")}</button></div>
+      <label class="foto-boton"><input class="foto-input" type="file" accept="image/*" capture="environment" hidden>${svgIco("camara")}<span>Sacar o elegir foto</span></label>
+    </div>
+    <p class="campo-ayuda">Se comprime en el teléfono (máx. 800 px). Si pesa demasiado, usá el link de la impresión.</p>`;
+  const prev = wrap.querySelector(".foto-prev");
+  const imgEl = wrap.querySelector(".foto-prev img");
+  const input = wrap.querySelector(".foto-input");
+  const lblSpan = wrap.querySelector(".foto-boton span");
+  const refrescar = () => {
+    if (fotoData) { imgEl.src = fotoData; prev.hidden = false; lblSpan.textContent = "Cambiar foto"; }
+    else { imgEl.removeAttribute("src"); prev.hidden = true; lblSpan.textContent = "Sacar o elegir foto"; }
+  };
+  input.onchange = async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    lblSpan.textContent = "Comprimiendo…";
+    let data = null;
+    try { data = await comprimirFoto(file); } catch { data = null; }
+    input.value = "";
+    if (!data) { toast("La foto es muy pesada. Usá el campo de link de la impresión.", true); refrescar(); return; }
+    fotoData = data;
+    refrescar();
+  };
+  wrap.querySelector(".foto-quitar").onclick = () => { fotoData = null; refrescar(); };
+  refrescar();
+  return { el: wrap, get: () => fotoData };
+}
 
 function formRollo(rollo) {
   const r = rollo || {};
@@ -911,6 +1110,10 @@ function formCierre(imp, { conMotivo, edicion }) {
     </div>` : ""}
     <p class="campo-ayuda">${conMotivo ? "Las fallidas igual consumen material y suman horas de máquina — solo no cuentan como éxito." : "Prefilleado con lo estimado. Corregí si el slicer le erró."}</p>`;
 
+  // Foto opcional solo al terminar (§2, §5.5) — las fallidas no llevan foto.
+  let foto = null;
+  if (!conMotivo) { foto = campoFoto(imp.fotoBase64 || null); form.append(foto.el); }
+
   const leer = () => {
     const g = parseInt(form.querySelector("#c-gr").value, 10);
     if (Number.isNaN(g) || g < 0) return marcarError(form.querySelector("#c-gr"), "Cargá los gramos");
@@ -920,6 +1123,7 @@ function formCierre(imp, { conMotivo, edicion }) {
     if (!(tiempoRealMin > 0)) return marcarError(form.querySelector("#c-h"), "Cargá el tiempo");
     const out = { gramosReales: g, tiempoRealMin };
     if (conMotivo) out.motivoFallo = form.querySelector("#c-mot").value;
+    else out.fotoBase64 = foto.get();
     return out;
   };
   return { el: form, leer };
@@ -1055,9 +1259,10 @@ function desarchivarRollo(id) {
   toast("Rollo desarchivado");
 }
 
-function nuevaImpresion() {
+// preset: precarga campos (ej. desde la wishlist). alGuardar: callback tras crear.
+function nuevaImpresion(preset, alGuardar) {
   if (!requiereConexion()) return;
-  const f = formImpresion();
+  const f = formImpresion(preset);
   abrirHoja({
     titulo: "Nueva impresión", cuerpoEl: f.el, textoGuardar: "A la cola",
     guardar: async () => {
@@ -1068,6 +1273,7 @@ function nuevaImpresion() {
         creadoPor: estado.socioId, fechaCreacion: Date.now(), fechaFin: null,
       });
       overlayHide(); toast("Impresión en la cola");
+      if (alGuardar) await alGuardar();
     },
   });
 }
@@ -1123,7 +1329,7 @@ function pedirTerminar(id, edicion = false) {
     textoGuardar: edicion ? "Guardar" : "Marcar terminada",
     guardar: async () => {
       const d = f.leer(); if (!d) return;
-      const patch = { gramosReales: d.gramosReales, tiempoRealMin: d.tiempoRealMin };
+      const patch = { gramosReales: d.gramosReales, tiempoRealMin: d.tiempoRealMin, fotoBase64: d.fotoBase64 ?? null };
       if (!edicion) { patch.estado = "terminada"; patch.fechaFin = Date.now(); }
       await update(ref(db, `impresiones/${id}`), patch);
       overlayHide(); toast(edicion ? "Datos actualizados" : "Impresión terminada 🎉");
@@ -1204,6 +1410,7 @@ function manejarAccion(acc, id) {
   else if (acc === "terminar") pedirTerminar(id);
   else if (acc === "fallar") pedirFallar(id);
   else if (acc === "mas") accionesImpresion(id);
+  else if (acc === "foto") verFoto(id);
 }
 
 function accionesImpresion(id) {
@@ -1232,10 +1439,235 @@ function accionesImpresion(id) {
   } else {
     items.push({ label: "Corregir gramos y tiempo", icon: "editar", onClick: () => (imp.estado === "fallida" ? pedirFallar(id, true) : pedirTerminar(id, true)) });
     items.push({ label: "Editar impresión", icon: "ajustes", onClick: () => editarImpresion(id) });
+    if (imp.estado === "terminada") {
+      items.push({ label: imp.fotoBase64 ? "Cambiar foto" : "Agregar foto", icon: "camara", onClick: () => cambiarFoto(id) });
+      if (imp.fotoBase64) items.push({ label: "Quitar foto", icon: "borrar", onClick: () => quitarFoto(id) });
+    }
     items.push("sep");
     items.push({ label: "Borrar", icon: "borrar", danger: true, onClick: () => borrarImpresion(id) });
   }
   abrirAcciones(imp.nombre, items);
+}
+
+// --- Foto de una terminada desde el historial (agregar/cambiar/quitar) ---
+function cambiarFoto(id) {
+  if (!requiereConexion()) return;
+  const imp = estado.impresiones[id]; if (!imp) return;
+  const foto = campoFoto(imp.fotoBase64 || null);
+  const cuerpo = el("div", "form");
+  cuerpo.append(foto.el);
+  abrirHoja({
+    titulo: imp.fotoBase64 ? "Cambiar foto" : "Agregar foto", cuerpoEl: cuerpo, textoGuardar: "Guardar",
+    guardar: async () => {
+      await update(ref(db, `impresiones/${id}`), { fotoBase64: foto.get() });
+      overlayHide(); toast(foto.get() ? "Foto guardada" : "Foto quitada");
+    },
+  });
+}
+async function quitarFoto(id) {
+  const imp = estado.impresiones[id]; if (!imp) return;
+  const ok = await confirmar({ titulo: "Quitar foto", mensaje: `Se saca la foto de <b>${esc(imp.nombre)}</b>.`, ok: "Quitar", peligro: true });
+  if (!ok) return;
+  await update(ref(db, `impresiones/${id}`), { fotoBase64: null });
+  toast("Foto quitada");
+}
+
+// =====================================================================
+// 10.b · Wishlist — acciones (§5.5)
+// =====================================================================
+function toggleVoto(id) {
+  if (!requiereConexion()) return;
+  const it = estado.wishlist[id]; if (!it) return;
+  const voto = !!it.votos?.[estado.socioId];
+  if (voto) remove(ref(db, `wishlist/${id}/votos/${estado.socioId}`));
+  else set(ref(db, `wishlist/${id}/votos/${estado.socioId}`), true);
+}
+
+function mandarACola(itemId) {
+  const item = estado.wishlist[itemId]; if (!item) return;
+  nuevaImpresion({ nombre: item.nombre, linkSTL: item.link || "" }, async () => {
+    await update(ref(db, `wishlist/${itemId}`), { impreso: true });
+    toast("Idea marcada como impresa");
+  });
+}
+
+function reproponerIdea(id) {
+  update(ref(db, `wishlist/${id}`), { impreso: false });
+  toast("De vuelta en la wishlist");
+}
+function marcarImpresa(id) {
+  update(ref(db, `wishlist/${id}`), { impreso: true });
+  toast("Marcada como impresa");
+}
+async function borrarIdea(id) {
+  const it = estado.wishlist[id]; if (!it) return;
+  const ok = await confirmar({ titulo: "Borrar idea", mensaje: `Se elimina <b>${esc(it.nombre)}</b> de la wishlist.`, ok: "Borrar", peligro: true });
+  if (!ok) return;
+  await remove(ref(db, `wishlist/${id}`));
+  toast("Idea borrada");
+}
+
+function formIdea(item) {
+  const it = item || {};
+  const form = el("form", "form");
+  form.innerHTML = `
+    <div class="campo">
+      <label class="campo-lbl" for="w-nom">¿Qué querés imprimir?</label>
+      <input id="w-nom" type="text" value="${esc(it.nombre || "")}" placeholder="Organizador de cables" autocomplete="off">
+    </div>
+    <div class="campo">
+      <label class="campo-lbl" for="w-link">Link al modelo <span class="opt">· opcional</span></label>
+      <input id="w-link" type="url" value="${esc(it.link || "")}" placeholder="https://www.printables.com/…" autocomplete="off">
+    </div>`;
+  const leer = () => {
+    const nombre = form.querySelector("#w-nom").value.trim();
+    if (!nombre) return marcarError(form.querySelector("#w-nom"), "Poné un nombre");
+    return { nombre, link: form.querySelector("#w-link").value.trim() };
+  };
+  return { el: form, leer };
+}
+function nuevaIdea() {
+  if (!requiereConexion()) return;
+  const f = formIdea();
+  abrirHoja({
+    titulo: "Nueva idea", cuerpoEl: f.el, textoGuardar: "Proponer",
+    guardar: async () => {
+      const d = f.leer(); if (!d) return;
+      // el que propone ya arranca con su voto puesto (§5.5)
+      await push(ref(db, "wishlist"), {
+        nombre: d.nombre, link: d.link, propuestoPor: estado.socioId,
+        votos: { [estado.socioId]: true }, fecha: Date.now(), impreso: false,
+      });
+      overlayHide(); toast("Idea agregada a la wishlist");
+    },
+  });
+}
+function editarIdea(id) {
+  const it = estado.wishlist[id]; if (!it) return;
+  const f = formIdea(it);
+  abrirHoja({
+    titulo: "Editar idea", cuerpoEl: f.el, textoGuardar: "Guardar",
+    guardar: async () => {
+      const d = f.leer(); if (!d) return;
+      await update(ref(db, `wishlist/${id}`), { nombre: d.nombre, link: d.link });
+      overlayHide(); toast("Idea actualizada");
+    },
+  });
+}
+function accionesWishlist(id) {
+  const it = estado.wishlist[id]; if (!it) return;
+  const items = [{ label: "Editar idea", icon: "editar", onClick: () => editarIdea(id) }];
+  if (it.impreso) items.push({ label: "Volver a proponer", icon: "atras", onClick: () => reproponerIdea(id) });
+  else items.push({ label: "Marcar como impresa", icon: "check", onClick: () => marcarImpresa(id) });
+  items.push("sep");
+  items.push({ label: "Borrar idea", icon: "borrar", danger: true, onClick: () => borrarIdea(id) });
+  abrirAcciones(it.nombre, items);
+}
+
+// =====================================================================
+// 10.c · Mantenimiento, configuración y backup (§4.5, §5, §7-F4)
+// =====================================================================
+function registrarMantenimiento() {
+  if (!requiereConexion()) return;
+  const horas = Math.round(horasMaquina(estado.impresiones) * 10) / 10;
+  const sugeridos = ["Lubricación de ejes", "Cambio de nozzle", "Nivelación de cama", "Ajuste de correas", "Limpieza general", "Cambio de tubo PTFE"];
+  const form = el("form", "form");
+  form.innerHTML = `
+    <div class="ajuste-info">La máquina lleva <b>${esc(formatHoras(horas))}</b> de uso. Se guarda ese número como referencia de este mantenimiento.</div>
+    <div class="campo">
+      <label class="campo-lbl" for="m-tipo">¿Qué hiciste?</label>
+      <input id="m-tipo" type="text" list="mants" value="" placeholder="Lubricación de ejes" autocomplete="off">
+      <datalist id="mants">${sugeridos.map((m) => `<option value="${esc(m)}">`).join("")}</datalist>
+    </div>
+    <div class="campo">
+      <label class="campo-lbl" for="m-notas">Notas <span class="opt">· opcional</span></label>
+      <textarea id="m-notas" placeholder="Qué cambiaste, qué observaste…"></textarea>
+    </div>`;
+  abrirHoja({
+    titulo: "Registrar mantenimiento", cuerpoEl: form, textoGuardar: "Registrar",
+    guardar: async () => {
+      const tipo = form.querySelector("#m-tipo").value.trim();
+      if (!tipo) return marcarError(form.querySelector("#m-tipo"), "Poné qué mantenimiento hiciste");
+      await push(ref(db, "mantenimientos"), {
+        tipo, fecha: Date.now(), horasMaquina: horas,
+        hechoPor: estado.socioId, notas: form.querySelector("#m-notas").value.trim(),
+      });
+      overlayHide(); toast("Mantenimiento registrado");
+    },
+  });
+}
+
+function abrirConfig() {
+  if (!requiereConexion()) return;
+  const c = estado.config;
+  const cuerpo = el("div", "form");
+  cuerpo.innerHTML = `
+    <div class="campo">
+      <label class="campo-lbl" for="cf-mant">Horas entre mantenimientos</label>
+      <div class="sufijo"><input id="cf-mant" class="num" type="number" inputmode="numeric" min="1" value="${c.horasEntreMantenimiento ?? 200}"><span class="u">h</span></div>
+    </div>
+    <div class="campo">
+      <label class="campo-lbl" for="cf-umbral">Umbral de stock bajo</label>
+      <div class="sufijo"><input id="cf-umbral" class="num" type="number" inputmode="numeric" min="1" value="${c.umbralStockBajoGramos ?? 150}"><span class="u">g</span></div>
+    </div>
+    <div class="campo">
+      <label class="campo-lbl" for="cf-carrete">Peso del carrete vacío</label>
+      <div class="sufijo"><input id="cf-carrete" class="num" type="number" inputmode="numeric" min="1" value="${c.pesoCarreteVacio ?? 200}"><span class="u">g</span></div>
+    </div>
+    <div class="campo">
+      <label class="campo-lbl" for="cf-ventana">Ventana de equidad de la cola</label>
+      <div class="sufijo"><input id="cf-ventana" class="num" type="number" inputmode="numeric" min="1" value="${c.ventanaEquidadDias ?? 30}"><span class="u">días</span></div>
+      <p class="campo-ayuda">Sobre cuántos días de uso reciente se reparte la cola justa.</p>
+    </div>`;
+
+  const herr = el("div", "config-herr");
+  herr.append(el("div", "config-herr-lbl", "Herramientas"));
+  const bMant = boton("Registrar mantenimiento", "boton-sec", "llave"); bMant.classList.add("boton-bloque");
+  bMant.onclick = () => { overlayHide(); registrarMantenimiento(); };
+  const bBackup = boton("Descargar backup (JSON)", "boton-sec", "descarga"); bBackup.classList.add("boton-bloque");
+  bBackup.onclick = descargarBackup;
+  herr.append(bMant, bBackup);
+  cuerpo.append(herr);
+
+  abrirHoja({
+    titulo: "Configuración", cuerpoEl: cuerpo, textoGuardar: "Guardar",
+    guardar: async () => {
+      const mant = intOrNull(cuerpo.querySelector("#cf-mant").value);
+      const umbral = intOrNull(cuerpo.querySelector("#cf-umbral").value);
+      const carrete = intOrNull(cuerpo.querySelector("#cf-carrete").value);
+      const ventana = intOrNull(cuerpo.querySelector("#cf-ventana").value);
+      if (!(mant > 0)) return marcarError(cuerpo.querySelector("#cf-mant"), "Horas entre mantenimientos: número mayor a 0");
+      if (!(umbral > 0)) return marcarError(cuerpo.querySelector("#cf-umbral"), "Umbral de stock bajo: número mayor a 0");
+      if (!(carrete > 0)) return marcarError(cuerpo.querySelector("#cf-carrete"), "Peso del carrete: número mayor a 0");
+      if (!(ventana > 0)) return marcarError(cuerpo.querySelector("#cf-ventana"), "Ventana de equidad: número mayor a 0");
+      await update(ref(db, "config"), {
+        horasEntreMantenimiento: mant, umbralStockBajoGramos: umbral,
+        pesoCarreteVacio: carrete, ventanaEquidadDias: ventana,
+      });
+      overlayHide(); toast("Configuración guardada");
+    },
+  });
+}
+
+// Export/backup (§7-F4): descarga el árbol completo de RTDB como JSON.
+async function descargarBackup() {
+  if (!db) { toast("Sin conexión con la base", true); return; }
+  try {
+    const snap = await get(ref(db, "/"));
+    const json = JSON.stringify(snap.val() || {}, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const d = new Date();
+    const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const a = el("a");
+    a.href = url; a.download = `printlog-backup-${stamp}.json`;
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast("Backup descargado");
+  } catch (e) {
+    console.error("Backup falló:", e);
+    toast("No se pudo descargar el backup", true);
+  }
 }
 
 // =====================================================================
@@ -1306,6 +1738,7 @@ function escucharNodos() {
   onValue(ref(db, "impresiones"), (snap) => { estado.impresiones = snap.val() || {}; renderTodo(); });
   onValue(ref(db, "ajustes"), (snap) => { estado.ajustes = snap.val() || {}; renderTodo(); });
   onValue(ref(db, "mantenimientos"), (snap) => { estado.mantenimientos = snap.val() || {}; renderTodo(); });
+  onValue(ref(db, "wishlist"), (snap) => { estado.wishlist = snap.val() || {}; renderTodo(); });
 
   onValue(ref(db, "config"), (snap) => {
     const c = snap.val();
@@ -1331,6 +1764,7 @@ function iniciar() {
 
   $$(".tab").forEach((t) => (t.onclick = () => renderVista(t.dataset.vista)));
   $("#chip-socio").onclick = abrirSelector;
+  $("#btn-config").onclick = abrirConfig;
   $("#selector").addEventListener("click", (e) => { if (e.target === $("#selector")) cerrarSelector(); });
 
   renderSelector();

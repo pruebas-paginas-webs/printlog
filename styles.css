@@ -733,6 +733,143 @@ details.expand[open] > summary .chev { transform: rotate(180deg); }
 .mes-fill { display: block; width: 100%; background: var(--acento); border-radius: 6px 6px 0 0; transition: height 0.35s ease; min-height: 0; }
 .mes-lbl { font: 500 10.5px var(--mono); color: var(--texto-suave); text-transform: lowercase; }
 
+/* ---- F4: wishlist, fotos, mantenimiento, config -------------------- */
+
+/* botón de config en topbar */
+.chip-icono {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; min-height: 44px; border-radius: 999px;
+  color: var(--texto-suave); background: var(--superficie); border: 1px solid var(--borde);
+  transition: color 0.15s, border-color 0.15s;
+}
+.chip-icono:hover { color: var(--texto); border-color: var(--texto-suave); }
+.chip-icono svg { width: 19px; height: 19px; }
+
+/* alerta de mantenimiento con botón */
+.alerta-mant .boton { margin-left: auto; flex: none; min-height: 40px; padding: 0 14px; }
+.alerta-mant div { flex: 1; min-width: 0; }
+
+/* wishlist */
+.wish.impreso { opacity: 0.6; }
+.wish-cab { display: flex; align-items: flex-start; gap: 12px; }
+.wish-info { flex: 1; min-width: 0; }
+.wish-meta {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px;
+  margin-top: 5px; font-size: 12.5px; color: var(--texto-suave);
+}
+.wish-link {
+  display: inline-flex; align-items: center; gap: 5px;
+  color: var(--acento); text-decoration: none; font-weight: 500;
+}
+.wish-link:hover { text-decoration: underline; }
+.wish-link svg { width: 14px; height: 14px; }
+.wish-votos { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.wish-votos-lbl { font: 500 12px var(--mono); color: var(--texto-suave); }
+.wish-sin { font: 400 12px var(--sans); color: var(--texto-suave); opacity: 0.7; }
+
+.voto-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  min-width: 52px; min-height: 56px; padding: 7px 10px; flex: none;
+  border: 1px solid var(--borde); border-radius: 12px;
+  background: var(--superficie-2); color: var(--texto-suave);
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.voto-btn svg { width: 20px; height: 20px; }
+.voto-btn .voto-n { font-size: 13px; font-weight: 600; }
+.voto-btn:hover { border-color: var(--texto-suave); }
+.voto-btn.activo {
+  color: var(--acento);
+  border-color: color-mix(in srgb, var(--acento) 55%, transparent);
+  background: color-mix(in srgb, var(--acento) 12%, var(--superficie-2));
+}
+.voto-btn.activo svg { fill: currentColor; }
+
+/* galería de terminadas con foto */
+.galeria {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px;
+}
+.galeria-item {
+  aspect-ratio: 1; border-radius: 10px; overflow: hidden;
+  border: 1px solid var(--borde); background: var(--superficie);
+  transition: border-color 0.15s;
+}
+.galeria-item:hover { border-color: var(--texto-suave); }
+.galeria-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* visor de foto grande (overlay centrado) */
+.foto-visor {
+  position: relative; width: min(560px, calc(100vw - 24px));
+  display: flex; flex-direction: column;
+  background: var(--superficie); border: 1px solid var(--borde);
+  border-radius: 16px; overflow: hidden; box-shadow: var(--sombra);
+  animation: subir 0.2s ease;
+}
+.foto-grande { width: 100%; max-height: 70dvh; object-fit: contain; background: #0c0d0f; display: block; }
+.foto-cerrar {
+  position: absolute; top: 10px; right: 10px; z-index: 1;
+  width: 38px; height: 38px; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(12, 13, 15, 0.72); color: var(--texto);
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+}
+.foto-cerrar svg { width: 18px; height: 18px; }
+.foto-pie {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  padding: 12px 16px;
+}
+.foto-nombre { font: 600 15px var(--sans); }
+.foto-fecha { font-size: 12px; color: var(--texto-suave); }
+
+/* campo de foto en formularios */
+.foto-campo { display: flex; align-items: center; gap: 12px; }
+.foto-prev {
+  position: relative; width: 74px; height: 74px; flex: none;
+  border-radius: 10px; overflow: hidden; border: 1px solid var(--borde);
+}
+.foto-prev img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.foto-quitar {
+  position: absolute; top: 3px; right: 3px;
+  width: 26px; height: 26px; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(12, 13, 15, 0.78); color: var(--texto);
+}
+.foto-quitar svg { width: 13px; height: 13px; }
+.foto-boton {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 46px; padding: 0 16px; flex: 1;
+  border: 1px dashed var(--borde); border-radius: 10px; cursor: pointer;
+  font: 600 14px var(--sans); color: var(--texto-suave);
+  transition: color 0.15s, border-color 0.15s;
+}
+.foto-boton:hover { color: var(--texto); border-color: var(--texto-suave); }
+.foto-boton svg { width: 19px; height: 19px; }
+
+/* thumbnail de foto en cards del historial */
+.imp-thumb {
+  width: 52px; height: 52px; flex: none;
+  border-radius: 9px; overflow: hidden; border: 1px solid var(--borde); padding: 0;
+}
+.imp-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* último mantenimiento (stats) */
+.mant-card { display: flex; align-items: flex-start; gap: 13px; }
+.mant-card > svg { width: 20px; height: 20px; color: var(--texto-suave); flex: none; margin-top: 2px; }
+.mant-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.mant-tit { font: 600 11px/1 var(--mono); letter-spacing: 0.07em; text-transform: uppercase; color: var(--texto-suave); }
+.mant-detalle { font-size: 13.5px; color: var(--texto-suave); }
+.mant-detalle b { color: var(--texto); }
+.mant-notas { font-size: 12.5px; color: var(--texto-suave); opacity: 0.8; white-space: pre-wrap; }
+
+/* herramientas dentro del modal de config */
+.config-herr {
+  display: flex; flex-direction: column; gap: 10px;
+  margin-top: 6px; padding-top: 16px; border-top: 1px solid var(--borde-suave);
+}
+.config-herr-lbl {
+  font: 600 11px/1 var(--mono); letter-spacing: 0.07em; text-transform: uppercase;
+  color: var(--texto-suave);
+}
+
 /* ---- toasts ------------------------------------------------------ */
 
 .toasts {
